@@ -340,8 +340,8 @@ export const INITIAL_CANDIDATES: Candidate[] = [
   },
   {
     id: 'cand-5',
-    name: 'Nisha',
-    phone: '+91 9588547122',
+    name: 'Disha',
+    phone: '+91 9545747122',
     email: 'nishusingh@whitecollarrealty.com',
     appliedRole: 'Senior Relationship Manager - Dubai Desk',
     status: 'Callback Needed',
