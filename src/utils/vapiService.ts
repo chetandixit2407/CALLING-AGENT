@@ -200,7 +200,7 @@ class VapiClientService {
     const lower = (typeof raw === 'string' ? raw : '').toLowerCase();
 
     if (lower.includes('notallowederror') || lower.includes('permission denied') || lower.includes('microphone')) {
-      return 'Microphone permission was denied. Please allow microphone access in your browser address bar to speak with Pooja.';
+      return 'Microphone permission was denied. Please allow microphone access in your browser address bar to speak with Arjun.';
     }
     if (lower.includes('notfounderror') || lower.includes('device')) {
       return 'No microphone found. Please connect an audio input device and try again.';

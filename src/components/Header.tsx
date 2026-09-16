@@ -41,7 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-slate-600">•</span>
                 <span className="inline-flex items-center gap-1 text-emerald-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Agent Pooja (Vapi Voice) Online
+                  Agent Arjun (Vapi Voice) Online
                 </span>
               </p>
             </div>

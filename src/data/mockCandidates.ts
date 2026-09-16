@@ -102,7 +102,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
       category: 'Notice Period Evaluation',
       createdAt: '2026-09-15 09:30',
       actionDueDate: 'Today',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     },
     remarksHistory: [
       {
@@ -112,7 +112,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         category: 'Notice Period Evaluation',
         createdAt: '2026-09-15 09:30',
         actionDueDate: 'Today',
-        author: 'Pooja (Virtual AI HR)',
+        author: 'Arjun (Virtual AI HR)',
       },
     ],
     alertDueDate: 'Today',
@@ -160,7 +160,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
       category: 'Interview Scheduled',
       createdAt: '2026-09-14 16:42',
       actionDueDate: 'Tomorrow',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     },
     remarksHistory: [
       {
@@ -170,7 +170,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         category: 'Interview Scheduled',
         createdAt: '2026-09-14 16:42',
         actionDueDate: 'Tomorrow',
-        author: 'Pooja (Virtual AI HR)',
+        author: 'Arjun (Virtual AI HR)',
       },
     ],
     alertDueDate: 'Tomorrow',
@@ -262,7 +262,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
       category: 'Attendance Reconfirmation',
       createdAt: '2026-09-14 18:10',
       actionDueDate: 'Tomorrow',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     },
     remarksHistory: [
       {
@@ -272,7 +272,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         category: 'Attendance Reconfirmation',
         createdAt: '2026-09-14 18:10',
         actionDueDate: 'Tomorrow',
-        author: 'Pooja (Virtual AI HR)',
+        author: 'Arjun (Virtual AI HR)',
       },
     ],
     alertDueDate: 'Tomorrow',
@@ -321,7 +321,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
       category: 'Missed Interview Reschedule',
       createdAt: '2026-09-14 14:30',
       actionDueDate: 'Overdue',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     },
     remarksHistory: [
       {
@@ -331,7 +331,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         category: 'Missed Interview Reschedule',
         createdAt: '2026-09-14 14:30',
         actionDueDate: 'Overdue',
-        author: 'Pooja (Virtual AI HR)',
+        author: 'Arjun (Virtual AI HR)',
       },
     ],
     alertDueDate: 'Overdue',
@@ -361,7 +361,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
       category: 'Callback Due',
       createdAt: '2026-09-15 12:15',
       actionDueDate: 'Today',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     },
     remarksHistory: [
       {
@@ -371,7 +371,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         category: 'Callback Due',
         createdAt: '2026-09-15 12:15',
         actionDueDate: 'Today',
-        author: 'Pooja (Virtual AI HR)',
+        author: 'Arjun (Virtual AI HR)',
       },
     ],
     alertDueDate: 'Today',
@@ -398,7 +398,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
       category: 'Unanswered Retry',
       createdAt: '2026-09-15 10:05',
       actionDueDate: 'Today',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     },
     remarksHistory: [
       {
@@ -408,7 +408,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         category: 'Unanswered Retry',
         createdAt: '2026-09-15 10:05',
         actionDueDate: 'Today',
-        author: 'Pooja (Virtual AI HR)',
+        author: 'Arjun (Virtual AI HR)',
       },
     ],
     alertDueDate: 'Today',
@@ -439,7 +439,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
       category: 'Declined - Do Not Call',
       createdAt: '2026-09-14 11:30',
       actionDueDate: 'Overdue',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     },
     remarksHistory: [
       {
@@ -449,7 +449,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         category: 'Declined - Do Not Call',
         createdAt: '2026-09-14 11:30',
         actionDueDate: 'Overdue',
-        author: 'Pooja (Virtual AI HR)',
+        author: 'Arjun (Virtual AI HR)',
       },
     ],
     callHistory: [],
@@ -490,7 +490,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
       category: 'Already Joined - Counter Offer Open',
       createdAt: '2026-09-15 11:15',
       actionDueDate: 'Today',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     },
     remarksHistory: [
       {
@@ -500,7 +500,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         category: 'Already Joined - Counter Offer Open',
         createdAt: '2026-09-15 11:15',
         actionDueDate: 'Today',
-        author: 'Pooja (Virtual AI HR)',
+        author: 'Arjun (Virtual AI HR)',
       },
     ],
     alertDueDate: 'Today',
@@ -521,7 +521,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         scenario: 'screening',
         durationSeconds: 156,
         transcript: [
-          { id: 'sm1', sender: 'agent', text: 'Hello Siddharth! I am Pooja, Virtual HR Assistant calling from White Collar Realty regarding your application for the Associate Vice President - Luxury Sales role. Is this a good time to speak?', timestamp: '11:15:02' },
+          { id: 'sm1', sender: 'agent', text: 'Hello Siddharth! I am Arjun, Virtual HR Assistant calling from White Collar Realty regarding your application for the Associate Vice President - Luxury Sales role. Is this a good time to speak?', timestamp: '11:15:02' },
           { id: 'sm2', sender: 'candidate', text: 'Actually I have already joined some other company last week.', timestamp: '11:15:15' },
           { id: 'sm3', sender: 'agent', text: 'Heartiest congratulations on your new role, Siddharth! We completely respect your decision. May I share that for the Associate Vice President role at White Collar Realty, our leadership budget offers 20 to 28 LPA fixed plus an uncapped luxury commission pool across both Gurgaon and Dubai luxury desks. If you are open, would you like to explore this leadership opportunity?', timestamp: '11:15:28' },
           { id: 'sm4', sender: 'candidate', text: 'What is the budget and role at White Collar Realty? I can explore if it is better.', timestamp: '11:15:42' },
@@ -573,7 +573,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
       category: 'Already Joined - Future Pipeline',
       createdAt: '2026-09-14 15:20',
       actionDueDate: 'In 90 Days',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     },
     remarksHistory: [
       {
@@ -583,7 +583,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
         category: 'Already Joined - Future Pipeline',
         createdAt: '2026-09-14 15:20',
         actionDueDate: 'In 90 Days',
-        author: 'Pooja (Virtual AI HR)',
+        author: 'Arjun (Virtual AI HR)',
       },
     ],
     alertDueDate: 'Upcoming',

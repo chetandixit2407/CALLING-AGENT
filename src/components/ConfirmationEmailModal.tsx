@@ -53,7 +53,7 @@ MANDATORY DOCUMENTS TO CARRY:
 3. Previous Real Estate sales credentials & recent salary slips / appointment letter
 
 CONTACT & ASSISTANCE:
-Upon arrival at Tower-A lobby, please inform the reception desk that you have arrived for the White Collar Realty interview with HR Team / Pooja. Should you require any guidance regarding the route or timing, reply directly to this email or contact our HR desk.
+Upon arrival at Tower-A lobby, please inform the reception desk that you have arrived for the White Collar Realty interview with HR Team / Arjun. Should you require any guidance regarding the route or timing, reply directly to this email or contact our HR desk.
 
 We look forward to meeting you and discussing your growth with White Collar Realty.
 

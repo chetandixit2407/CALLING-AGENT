@@ -50,30 +50,35 @@ export class VoiceAudioManager {
       if (hindiVoice) return hindiVoice;
     }
 
-    // 2. High-priority search for Google Assistant / Alexa Natural Indian English Female Voices
-    // E.g. "Google English (India)", Microsoft Heera Online (Natural), Microsoft Neerja Online (Natural), Veena, Raveena
-    const naturalIndianFemale = this.voices.find((v) => {
+    // 2. High-priority search for Indian English Voice (Arjun - White Collar HR)
+    // E.g. Microsoft Prabhat Online (Natural), Madhav, Ravi, Google English (India)
+    const naturalIndianMale = this.voices.find((v) => {
+      const name = v.name.toLowerCase();
+      const lang = v.lang.toLowerCase();
+      const isIndian = lang.includes('en-in') || lang.includes('en_in') || name.includes('india');
+      const isMale = name.includes('prabhat') || name.includes('madhav') || name.includes('ravi') || 
+                     name.includes('rishi') || name.includes('male') || name.includes('arjun');
+      return isIndian && isMale;
+    });
+    if (naturalIndianMale) return naturalIndianMale;
+
+    const naturalIndian = this.voices.find((v) => {
       const name = v.name.toLowerCase();
       const lang = v.lang.toLowerCase();
       const isIndian = lang.includes('en-in') || lang.includes('en_in') || name.includes('india');
       const isNaturalOrNeural = name.includes('natural') || name.includes('neural') || name.includes('online') || name.includes('google');
-      const isFemale = name.includes('female') || name.includes('heera') || name.includes('neerja') || 
-                       name.includes('veena') || name.includes('kavya') || name.includes('priya') ||
-                       name.includes('raveena') || name.includes('geeta');
-      return isIndian && (isNaturalOrNeural || isFemale);
+      return isIndian && isNaturalOrNeural;
     });
-    if (naturalIndianFemale) return naturalIndianFemale;
+    if (naturalIndian) return naturalIndian;
 
-    // 3. Indian English Female Voices (Pooja - White Collar HR)
-    const indianFemale = this.voices.find((v) => {
+    // 3. Any Indian English Voice (Arjun - White Collar HR)
+    const indianVoice = this.voices.find((v) => {
       const name = v.name.toLowerCase();
       const lang = v.lang.toLowerCase();
       const isIndian = lang.includes('en-in') || lang.includes('en_in') || name.includes('india');
-      const isFemale = name.includes('female') || name.includes('heera') || name.includes('neerja') || 
-                       name.includes('veena') || name.includes('kavya') || name.includes('priya');
-      return isIndian && isFemale;
+      return isIndian;
     });
-    if (indianFemale) return indianFemale;
+    if (indianVoice) return indianVoice;
 
     // 4. Any Google / Microsoft Natural English Voice (Alexa / Assistant tier)
     const googleAssistantVoice = this.voices.find((v) => {

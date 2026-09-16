@@ -515,7 +515,7 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                             }`}
                           >
                             <div className="flex items-center justify-between font-bold text-[10px] text-slate-400 mb-1">
-                              <span>{msg.sender === 'agent' ? 'Pooja (White Collar HR)' : candidate.name}</span>
+                              <span>{msg.sender === 'agent' ? 'Arjun (White Collar HR)' : candidate.name}</span>
                               <span>{msg.timestamp}</span>
                             </div>
                             <div>{msg.text}</div>

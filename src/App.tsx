@@ -916,7 +916,7 @@ export default function App() {
                             }`}
                           >
                             <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold mb-0.5">
-                              <span>{msg.sender === 'agent' ? 'Pooja (White Collar HR)' : call.candidateName}</span>
+                              <span>{msg.sender === 'agent' ? 'Arjun (White Collar HR)' : call.candidateName}</span>
                               <span>{msg.timestamp}</span>
                             </div>
                             <div>{msg.text}</div>

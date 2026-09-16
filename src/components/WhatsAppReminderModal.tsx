@@ -39,7 +39,7 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
     if (templateType === 'unanswered') {
       return `Hello ${candidate.name},
 
-This is Pooja, Virtual HR Assistant from *White Collar Realty*. 
+This is Arjun, Virtual HR Assistant from *White Collar Realty*. 
 
 We tried calling your number regarding your application for the *${candidate.appliedRole}* role, but were unable to connect on call.
 
@@ -63,12 +63,12 @@ Gentle reminder regarding your upcoming face-to-face interview for the *${candid
 We tried connecting over phone for a quick reconfirmation. Please reply *YES* to confirm your attendance, or let us know if you need to reschedule to an alternate slot.
 
 Regards,
-Pooja | White Collar Realty HR Team`;
+Arjun | White Collar Realty HR Team`;
     }
 
     return `Hello ${candidate.name},
 
-This is Pooja from *White Collar Realty HR*. 
+This is Arjun from *White Collar Realty HR*. 
 
 We noticed you were unable to attend your scheduled interview yesterday at our Sector 67 Gurugram office. We hope everything is fine at your end.
 

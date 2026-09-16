@@ -327,7 +327,7 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
           {/* Voice State Title */}
           <div className="z-10">
             <h4 className="text-sm font-bold text-white flex items-center justify-center gap-2">
-              <span>Agent Pooja (HR Recruiter)</span>
+              <span>Agent Arjun (HR Recruiter)</span>
               <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
                 Vapi WebRTC
               </span>
@@ -342,7 +342,7 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
               )}
               {callStatus === 'active' && (
                 isAgentSpeaking ? (
-                  <span className="text-amber-400 font-medium">Pooja is speaking...</span>
+                  <span className="text-amber-400 font-medium">Arjun is speaking...</span>
                 ) : (
                   <span className="text-emerald-400 font-medium">Listening to candidate (Full Duplex Mic Live)...</span>
                 )
@@ -447,7 +447,7 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
                 >
                   <div className="flex items-center justify-between text-[10px] opacity-70 mb-1">
                     <span className="font-bold">
-                      {msg.sender === 'agent' ? 'Pooja (Virtual HR)' : (candidate?.name || 'Candidate')}
+                      {msg.sender === 'agent' ? 'Arjun (Virtual HR)' : (candidate?.name || 'Candidate')}
                     </span>
                     <span>{msg.timestamp}</span>
                   </div>

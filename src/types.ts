@@ -91,7 +91,7 @@ export interface CandidateRemark {
   category: RemarkCategory;
   createdAt: string;
   actionDueDate?: string; // e.g. 'Today', 'Tomorrow', 'Overdue', 'In 3 Days', or 'In 30 Days'
-  author?: string; // 'Pooja (Virtual AI HR)' | 'HR Operations'
+  author?: string; // 'Arjun (Virtual AI HR)' | 'HR Operations'
 }
 
 export interface Candidate {

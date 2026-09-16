@@ -259,7 +259,7 @@ function computeRawFallbackResponse(
         extractedFields: {},
         statusRecommendation: 'Screening Pending',
         generatedRemark: {
-          text: `Candidate paused during conversation. Pooja waited patiently without rushing per Google Assistant / Alexa natural pause rules.`,
+          text: `Candidate paused during conversation. Arjun waited patiently without rushing per Google Assistant / Alexa natural pause rules.`,
           priority: 'Medium',
           category: 'Notice Period Evaluation',
           actionDueDate: 'Today',
@@ -296,7 +296,7 @@ function computeRawFallbackResponse(
       extractedFields: {},
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Candidate asked to wait / check information. Pooja acknowledged patiently per Rule 12.`,
+        text: `Candidate asked to wait / check information. Arjun acknowledged patiently per Rule 12.`,
         priority: 'Low',
         category: 'Notice Period Evaluation',
         actionDueDate: 'Today',
@@ -1004,7 +1004,7 @@ function createSystemInstruction(candidate: any, scenario: string, availableSlot
   const roleInfo = getRoleBudgetInfo(candidate?.appliedRole);
 
   return `
-# WHITE COLLAR REALTY — NATURAL VOICE HR ASSISTANT ("POOJA")
+# WHITE COLLAR REALTY — NATURAL VOICE HR ASSISTANT ("ARJUN")
 
 You are the AI Voice HR Assistant for White Collar Realty, a premier luxury real estate advisory firm in Gurgaon and Dubai.
 Office HQ: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101.

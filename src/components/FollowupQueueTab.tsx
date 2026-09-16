@@ -62,7 +62,7 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
 
         {callbackCandidates.length === 0 ? (
           <div className="p-6 text-center rounded-xl bg-slate-950/40 border border-slate-800/80 text-xs text-slate-500">
-            No pending callback requests. When candidates tell Pooja they are driving or busy, callbacks are automatically recorded here.
+            No pending callback requests. When candidates tell Arjun they are driving or busy, callbacks are automatically recorded here.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -359,7 +359,7 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
 
         {pipelineCandidates.length === 0 ? (
           <div className="p-6 text-center rounded-xl bg-slate-950/40 border border-slate-800/80 text-xs text-slate-500">
-            No candidates currently in the pipeline queue. When a candidate informs Pooja they have joined another company, the system logs their package and queues them here.
+            No candidates currently in the pipeline queue. When a candidate informs Arjun they have joined another company, the system logs their package and queues them here.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">

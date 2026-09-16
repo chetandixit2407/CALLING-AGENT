@@ -182,8 +182,8 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     if (isVoiceTesting) return;
     setIsVoiceTesting(true);
     const sample = languageMode === 'Hindi'
-      ? 'Namaste! Main White Collar Realty Gurugram se Pooja bol rahi hoon.'
-      : 'Hello! I am Pooja, Virtual HR Assistant calling from White Collar Realty Gurugram.';
+      ? 'Namaste! Main White Collar Realty Gurugram se Arjun bol raha hoon.'
+      : 'Hello! I am Arjun, Virtual HR Assistant calling from White Collar Realty Gurugram.';
     voiceAudio.speak(sample, {
       language: languageMode,
       rate: 0.94,
@@ -293,18 +293,18 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     } else if (scenario === 'reminder') {
       // Rule 25: Interview reconfirmation greeting
       greeting = languageMode === 'Hindi'
-        ? `Namaste ${name} ji, main White Collar Realty se Pooja bol rahi hoon. Kal ${candidate.interviewTime || '11:00 AM'} ko hamare Sector 67 Gurugram office mein aapka interview scheduled hai. Kya aap confirm kar sakte hain ki aap attend kar rahe hain?`
+        ? `Namaste ${name} ji, main White Collar Realty se Arjun bol raha hoon. Kal ${candidate.interviewTime || '11:00 AM'} ko hamare Sector 67 Gurugram office mein aapka interview scheduled hai. Kya aap confirm kar sakte hain ki aap attend kar rahe hain?`
         : `Hi ${name}, I'm calling from White Collar Realty regarding your interview scheduled for tomorrow at ${candidate.interviewTime || '11:00 AM'}. I'm just calling to confirm whether you'll be able to attend.`;
     } else if (scenario === 'missed_followup') {
       // Rule 26: Missed interview follow-up greeting
       greeting = languageMode === 'Hindi'
-        ? `Namaste ${name} ji, main White Collar Realty HR se Pooja bol rahi hoon. Kal aapka interview scheduled tha par aap nahi aa paaye. Main check karna chahti thi ki sab theek hai aur kya aap reschedule karwana chahte hain?`
+        ? `Namaste ${name} ji, main White Collar Realty HR se Arjun bol raha hoon. Kal aapka interview scheduled tha par aap nahi aa paaye. Main check karna chahti thi ki sab theek hai aur kya aap reschedule karwana chahte hain?`
         : `Hi ${name}, I'm calling regarding your interview scheduled yesterday. We noticed you weren't able to attend. I wanted to check if everything is okay and whether you'd like to reschedule.`;
     } else if (scenario === 'callback_followup') {
       // Rule 11/13: Scheduled callback greeting
       greeting = languageMode === 'Hindi'
-        ? `Namaste ${name} ji! Pooja bol rahi hoon White Collar Realty se. Aapne call karne ko kaha tha. Kya abhi 2 minute baat karne ka sahi samay hai?`
-        : `Hi ${name}, I'm Pooja calling back from White Collar Realty as requested earlier. Is this a good time to speak for about two minutes?`;
+        ? `Namaste ${name} ji! Arjun bol raha hoon White Collar Realty se. Aapne call karne ko kaha tha. Kya abhi 2 minute baat karne ka sahi samay hai?`
+        : `Hi ${name}, I'm Arjun calling back from White Collar Realty as requested earlier. Is this a good time to speak for about two minutes?`;
     }
 
     const initialMsg: ChatMessage = {
@@ -328,7 +328,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         onEnd: () => {
           setIsAgentSpeaking(false);
           isAgentSpeakingRef.current = false;
-          // When Pooja finishes initial greeting, automatically open candidate mic for real-time talk!
+          // When Arjun finishes initial greeting, automatically open candidate mic for real-time talk!
           if (liveHandsFreeRef.current && callStatusRef.current === 'connected') {
             setTimeout(() => {
               startListening();
@@ -791,7 +791,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       category: remarkCategory,
       createdAt: new Date().toISOString(),
       actionDueDate: rawActionDue,
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     };
 
     const updatedCandidate: Candidate = {
@@ -858,7 +858,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       category: 'Unanswered Retry',
       createdAt: new Date().toISOString(),
       actionDueDate: 'Today',
-      author: 'Pooja (Virtual AI HR)',
+      author: 'Arjun (Virtual AI HR)',
     };
 
     const updatedCandidate: Candidate = {
@@ -1042,7 +1042,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               <span className="text-slate-400 font-medium">Virtual HR:</span>
               <span className="text-amber-400 font-semibold flex items-center gap-1">
                 <Bot className="w-3.5 h-3.5" />
-                Pooja (Gurgaon HR)
+                Arjun (Gurgaon HR)
               </span>
             </div>
 
@@ -1058,7 +1058,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                 onClick={handleTestIndianVoice}
                 disabled={isVoiceTesting || isAgentSpeaking}
                 className="ml-1 px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 text-[10px] font-semibold transition border border-amber-500/30 disabled:opacity-40 cursor-pointer"
-                title="Hear sample speech in Pooja's Indian accent"
+                title="Hear sample speech in Arjun's Indian accent"
               >
                 {isVoiceTesting ? '🔊 Playing...' : '🔊 Preview'}
               </button>
@@ -1074,16 +1074,16 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                     <span className="w-1 h-2 bg-amber-400 animate-bounce delay-150 rounded-full" />
                     <span className="w-1 h-3 bg-emerald-400 animate-bounce delay-100 rounded-full" />
                   </div>
-                  <span className="font-bold tracking-tight">Pooja Speaking (1-2 sentences)...</span>
+                  <span className="font-bold tracking-tight">Arjun Speaking (1-2 sentences)...</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleInterruptAgent}
                   className="px-2.5 py-1 rounded-lg bg-rose-500/25 hover:bg-rose-500/35 text-rose-200 border border-rose-500/50 text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs animate-pulse ring-2 ring-rose-500/20"
-                  title="Rule 8: Candidate interrupts / barge-in — immediately stops Pooja speaking"
+                  title="Rule 8: Candidate interrupts / barge-in — immediately stops Arjun speaking"
                 >
                   <VolumeX className="w-3.5 h-3.5" />
-                  <span>⚡ Interrupt Pooja (Rule 8 Barge-In)</span>
+                  <span>⚡ Interrupt Arjun (Rule 8 Barge-In)</span>
                 </button>
               </div>
             ) : isListening ? (
@@ -1197,7 +1197,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                   : 'bg-slate-800 text-slate-400 border border-slate-700'
               }`}
-              title="Hands-free natural two-way conversation (Google Assistant & Alexa style): mic opens automatically when Pooja finishes speaking"
+              title="Hands-free natural two-way conversation (Google Assistant & Alexa style): mic opens automatically when Arjun finishes speaking"
             >
               <Mic className={`w-3.5 h-3.5 ${liveHandsFree ? 'text-emerald-400' : ''}`} />
               <span>Full Duplex Mic: {liveHandsFree ? 'Auto-Listen (Alexa/Google)' : 'Manual'}</span>
@@ -1276,7 +1276,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                     >
                       <div className="flex items-center justify-between text-[10px] mb-1 opacity-75">
                         <span className="font-bold">
-                          {isAgent ? 'Pooja (Virtual HR)' : candidate.name}
+                          {isAgent ? 'Arjun (Virtual HR)' : candidate.name}
                         </span>
                         <span>{msg.timestamp}</span>
                       </div>
@@ -1300,7 +1300,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
                   <span className="font-semibold text-white shrink-0">Candidate Mic Live:</span>
                   <span className="text-emerald-200 truncate">
-                    {inputMessage ? `Hearing: "${inputMessage}"` : 'Speak naturally in English/Hindi/Hinglish — Pooja is listening...'}
+                    {inputMessage ? `Hearing: "${inputMessage}"` : 'Speak naturally in English/Hindi/Hinglish — Arjun is listening...'}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
