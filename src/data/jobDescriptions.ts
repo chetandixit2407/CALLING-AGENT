@@ -91,11 +91,44 @@ export const WHITE_COLLAR_JOB_DESCRIPTIONS: Record<string, JobDescription> = {
       'Have you handled corporate desk activations or NRI roadshows?',
       'What was your average monthly revenue generated through broker networks?'
     ]
+  },
+  'hr_recruiter': {
+    id: 'jd-hr',
+    title: 'HR Recruiter / Talent Acquisition Specialist',
+    department: 'Human Resources & Talent Acquisition',
+    location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
+    minExperienceYears: 2,
+    maxExperienceYears: 5,
+    minRealEstateExpYears: 1,
+    budgetBand: '6 - 10 LPA Fixed',
+    oteBand: '8 - 14 LPA with recruitment hiring incentives',
+    marketFocus: 'Real Estate Talent Sourcing across Gurugram & Delhi NCR',
+    noticePeriodExpectation: 'Immediate to 30 days',
+    keyResponsibilities: [
+      'Source, screen, and headhunt top-performing real estate sales professionals across Delhi NCR',
+      'Manage end-to-end recruitment lifecycle from initial telephonic screening to offer rollout',
+      'Coordinate interview schedules with Sales Directors and Department Heads',
+      'Maintain candidate pipeline, ATS tracking, and recruitment SLA metrics'
+    ],
+    requiredSkills: [
+      'Real Estate Talent Sourcing & Headhunting',
+      'Candidate Telephonic & Voice Screening',
+      'Offer Negotiation & Onboarding SLAs',
+      'Portal Sourcing (Naukri, LinkedIn, Referrals)'
+    ],
+    roleSpecificQuestions: [
+      'How many years of candidate sourcing and recruitment experience do you have in real estate?',
+      'What is your monthly closure run-rate for sales consultant and managerial profiles?',
+      'Which sourcing channels have yielded your highest quality hires?'
+    ]
   }
 };
 
 export function getWhiteCollarJobDescription(roleName?: string): JobDescription {
   const r = (roleName || '').toLowerCase();
+  if (r.includes('hr') || r.includes('recruit') || r.includes('talent') || r.includes('acquisition') || r.includes('people')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['hr_recruiter'];
+  }
   if (r.includes('lead') || r.includes('manager') || r.includes('head') || r.includes('vp') || r.includes('director')) {
     return WHITE_COLLAR_JOB_DESCRIPTIONS['sales_manager'];
   }

@@ -1,8 +1,16 @@
 import Vapi from '@vapi-ai/web';
+import { getWhiteCollarJobDescription } from '../data/jobDescriptions';
 
 export const DEFAULT_VAPI_ASSISTANT_ID = 'ed825f7a-e951-444b-81a7-1d6917e439c5';
 
 export type VapiCallStatus = 'idle' | 'connecting' | 'active' | 'ended' | 'error' | 'key_required';
+
+export interface VapiErrorInfo {
+  type: 'mic_permission' | 'mic_missing' | 'network_timeout' | 'auth' | 'general';
+  title: string;
+  message: string;
+  actionHint?: string;
+}
 
 export interface VapiTranscriptMessage {
   id: string;
@@ -17,6 +25,374 @@ type VolumeListener = (volume: number) => void;
 type SpeakingListener = (isAgentSpeaking: boolean) => void;
 
 /**
+ * Classifies voice and WebRTC errors into user-friendly actionable categories
+ */
+export function classifyVoiceError(err: any): VapiErrorInfo {
+  let raw = '';
+  if (typeof err === 'string') {
+    raw = err;
+  } else if (err && typeof err === 'object') {
+    if (typeof err.message === 'string') {
+      raw = err.message;
+    } else if (Array.isArray(err.message)) {
+      raw = err.message.join(', ');
+    } else if (typeof err.error === 'string') {
+      raw = err.error;
+    } else if (err.error && typeof err.error === 'object') {
+      if (typeof err.error.message === 'string') {
+        raw = err.error.message;
+      } else if (Array.isArray(err.error.message)) {
+        raw = err.error.message.join(', ');
+      } else {
+        try {
+          raw = JSON.stringify(err.error);
+        } catch {
+          raw = String(err.error);
+        }
+      }
+    } else {
+      try {
+        raw = JSON.stringify(err);
+      } catch {
+        raw = String(err);
+      }
+    }
+  } else {
+    raw = String(err || '');
+  }
+
+  const lower = raw.toLowerCase();
+
+  // 1. Microphone Permission Denied
+  if (
+    lower.includes('notallowederror') ||
+    lower.includes('permission denied') ||
+    lower.includes('microphone permission') ||
+    lower.includes('user denied') ||
+    lower.includes('denied')
+  ) {
+    return {
+      type: 'mic_permission',
+      title: 'Microphone Permission Denied',
+      message:
+        'Microphone access was denied. Your browser requires microphone access to enable live two-way voice screening with Arjun.',
+      actionHint:
+        'Please click the lock / microphone icon in your browser address bar, choose "Allow" for Microphone, and click Retry.',
+    };
+  }
+
+  // 2. Microphone Hardware Not Found
+  if (
+    lower.includes('notfounderror') ||
+    lower.includes('devicesnotfound') ||
+    lower.includes('no microphone') ||
+    (lower.includes('device') && lower.includes('not found'))
+  ) {
+    return {
+      type: 'mic_missing',
+      title: 'No Microphone Detected',
+      message: 'No active microphone or audio input hardware was detected on your computer or device.',
+      actionHint: 'Please connect a headset or verify your microphone settings in your system control panel.',
+    };
+  }
+
+  // 3. Network Connection Timeout / WebRTC Issues
+  if (
+    lower.includes('timeout') ||
+    lower.includes('timed out') ||
+    lower.includes('webrtc') ||
+    lower.includes('network') ||
+    lower.includes('ice') ||
+    lower.includes('failed to fetch') ||
+    lower.includes('websocket')
+  ) {
+    return {
+      type: 'network_timeout',
+      title: 'Voice Network Connection Timeout',
+      message:
+        'Connecting to the voice assistant servers timed out or encountered a WebRTC network interruption.',
+      actionHint:
+        'Please check your internet connection and Wi-Fi stability, then click "Retry Call" to re-connect.',
+    };
+  }
+
+  // 4. API Key / Authorization
+  if (
+    lower.includes('public key') ||
+    lower.includes('401') ||
+    lower.includes('unauthorized') ||
+    lower.includes('api key')
+  ) {
+    return {
+      type: 'auth',
+      title: 'Vapi Key Required',
+      message: 'A valid Vapi Public API Key is required to connect to the live assistant session.',
+      actionHint: 'Please enter your Vapi Public Key in the configuration form below to proceed.',
+    };
+  }
+
+  // 5. Configuration or schema validation error
+  if (
+    lower.includes('assistantoverrides') ||
+    lower.includes('bad request') ||
+    lower.includes('statuscode":400') ||
+    lower.includes('must be one of the following values')
+  ) {
+    return {
+      type: 'general',
+      title: 'Assistant Configuration Error',
+      message: 'The voice assistant settings were rejected by Vapi. Reconnecting with standard model configuration...',
+      actionHint: 'Please click Retry Call or switch to the interactive AI screening recruiter.',
+    };
+  }
+
+  return {
+    type: 'general',
+    title: 'Voice Assistant Error',
+    message: raw || 'An unexpected error occurred while connecting to the Vapi voice assistant.',
+    actionHint: 'Please click Retry or switch to the interactive AI screening recruiter.',
+  };
+}
+
+/**
+ * Builds standard Vapi assistant configuration with strict conversation state guard:
+ * - 30s silence timeout before asking "Are you there?" or "No problem, whenever you're ready"
+ * - NEVER ask the same question twice
+ * - Treat candidate short answers as final
+ * - Checks chat history and known CRM profile fields before asking any question
+ * - Dynamic role-aware screening based on White Collar Realty job descriptions
+ */
+export function buildVapiAssistantConfig(candidate?: any, extraOverrides?: any): any {
+  const candName = candidate?.name || 'Candidate';
+  const candRole = candidate?.appliedRole || 'Property Consultant';
+  const currCompany = candidate?.screening?.currentCompany || candidate?.conversationMemory?.current_company || '';
+  const currDesignation = candidate?.screening?.currentDesignation || candidate?.conversationMemory?.designation || '';
+  const experience =
+    candidate?.screening?.realEstateExperienceYears ||
+    candidate?.screening?.totalExperienceYears ||
+    candidate?.conversationMemory?.real_estate_experience ||
+    candidate?.conversationMemory?.total_experience ||
+    '';
+  const location = candidate?.screening?.currentLocation || candidate?.conversationMemory?.current_location || 'Gurugram / Delhi NCR';
+  const noticePeriod = candidate?.screening?.noticePeriodDays !== undefined
+    ? `${candidate.screening.noticePeriodDays} days`
+    : candidate?.conversationMemory?.notice_period || '';
+  const currentSalary = candidate?.screening?.currentSalaryLPA || candidate?.conversationMemory?.current_salary || '';
+  const expectedSalary = candidate?.screening?.expectedSalaryLPA || candidate?.conversationMemory?.expected_salary || '';
+
+  const jd = getWhiteCollarJobDescription(candRole);
+
+  const knownInventory: string[] = [];
+  const missingInventory: string[] = [];
+
+  if (currCompany) {
+    knownInventory.push(`• Current Company: "${currCompany}" [LOCKED - NEVER ASK]`);
+  } else {
+    missingInventory.push(`• Current Company: Inquire only if missing ("Where are you working currently?")`);
+  }
+
+  if (currDesignation) {
+    knownInventory.push(`• Designation: "${currDesignation}" [LOCKED - NEVER ASK]`);
+  } else {
+    missingInventory.push(`• Designation: Inquire if missing ("And what is your designation there?")`);
+  }
+
+  if (experience) {
+    knownInventory.push(`• Total/Real Estate Experience: "${experience} years" [LOCKED - NEVER ASK]`);
+  } else {
+    missingInventory.push(`• Experience: Inquire total real estate sales experience in Gurgaon/Dubai`);
+  }
+
+  if (currentSalary) {
+    knownInventory.push(`• Current Compensation: "${currentSalary}" [LOCKED - NEVER ASK]`);
+  } else {
+    missingInventory.push(`• Compensation: Ask current and expected CTC`);
+  }
+
+  if (noticePeriod) {
+    knownInventory.push(`• Notice Period: "${noticePeriod}" [LOCKED - NEVER ASK]`);
+  } else {
+    missingInventory.push(`• Notice Period: Inquire notice period and earliest joining date`);
+  }
+
+  const systemPrompt = `You are Arjun, the Virtual HR Voice Recruiter at White Collar Realty (M3M Urbana Business Park, Sector 67, Gurugram).
+Candidate Name: ${candName}
+Applied Position: ${candRole} (${jd.title})
+Department: ${jd.department}
+Office Location: ${jd.location}
+Approved Role Budget: ${jd.budgetBand} Fixed + ${jd.oteBand}
+Notice Period Expectation: ${jd.noticePeriodExpectation}
+
+============================================================
+CONVERSATION STATE GUARD (CRITICAL ANTI-REPETITION MANDATE)
+============================================================
+You have an internal conversation state guard. Before formulating any utterance or question:
+1. CHECK THE CHAT HISTORY (both user messages and assistant messages) and the known fields below.
+2. If an item has ALREADY been answered or provided by the candidate, mark it as STORED and NEVER ASK THAT QUESTION AGAIN.
+3. Treat the candidate's answer as FINAL unless the candidate explicitly corrects or changes it.
+4. Do NOT repeat a question simply because the answer was short. Short answers ("DLF", "M3M", "5 years", "30 days", "Immediate", "12 LPA", "Residential", "Yes", "No", "Gurgaon") are 100% COMPLETE AND FINAL.
+5. Never ask multiple questions at once. Ask exactly ONE missing question at a time.
+6. Skip already known information from the candidate profile immediately.
+
+CURRENT CRM STATE INVENTORY:
+ALREADY KNOWN ON FILE (NEVER ASK THESE AGAIN):
+${knownInventory.length > 0 ? knownInventory.join('\n') : '• None on file yet — collect progressively'}
+
+STILL MISSING FIELDS (COLLECT ONE-BY-ONE DYNAMICALLY):
+${missingInventory.length > 0 ? missingInventory.join('\n') : '• Core profile fields complete — proceed to role specific questions and interview scheduling'}
+
+ROLE SPECIFIC TECHNICAL QUESTIONS FOR ${jd.title}:
+${jd.roleSpecificQuestions.map((q, idx) => `${idx + 1}. "${q}"`).join('\n')}
+
+============================================================
+BARGE-IN & INTERRUPTION HANDLING (REAL-TIME VOICE RULE)
+============================================================
+- The candidate can interrupt you at any second while you speak.
+- When the candidate interrupts or speaks: IMMEDIATELY STOP speaking.
+- Process the candidate's words directly. Never repeat what you were saying before the interruption.
+- Acknowledge what they said and move smoothly to the next missing step.
+
+============================================================
+30-SECOND SILENCE & PAUSE HANDLING
+============================================================
+- Candidate thinking or brief pausing is natural. Do NOT treat a 2-second thinking pause as end of speech.
+- NEVER repeat previous questions when the candidate takes time to think.
+- Wait at least 30 seconds of silence before gently checking: "Are you there?" or "No problem, whenever you're ready."
+- If candidate confirms presence ("yes", "I am here", "haan", "sun raha hoon"): DO NOT repeat the previous question. Respond warmly: "Sure, take your time. I'm listening."
+
+============================================================
+CANDIDATE QUESTIONS & RETURNING TO FLOW
+============================================================
+If candidate asks questions during the call:
+- Office Location: "Our office is on the 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram."
+- Office Timings: "Our office timings are 10:00 AM to 6:30 PM, six days a week with Tuesday off, as weekends are prime site visit days."
+- Portfolio: "We advise on premier luxury developments with DLF, M3M, Godrej, Emaar, and Sobha in Gurgaon and Dubai."
+- Leads: "Yes, White Collar Realty provides verified high-intent CRM leads and marketing support."
+- Conveyance: "We provide conveyance and travel allowances for all client site visits."
+After answering concisely, return smoothly to the EXACT LAST UNCOLLECTED screening question. NEVER restart the introduction or repeat already answered questions!
+
+============================================================
+CANDIDATE CORRECTIONS
+============================================================
+- If candidate says e.g. "Actually, my experience is 7 years, not 6":
+  Acknowledge immediately: "Got it, I'll update that to seven years." Update memory without arguing.
+
+============================================================
+INTERVIEW SCHEDULING
+============================================================
+Once core screening is completed:
+- Offer available face-to-face interview slots at Sector 67 Gurugram HQ (e.g. Tomorrow at 02:30 PM or 04:30 PM, or Friday at 12:00 PM).
+- Confirm their preferred time, explain venue, and thank them warmly.
+
+============================================================
+CONVERSATION STYLE
+============================================================
+- Speak like an experienced, warm human HR recruiter from Gurgaon (Google Assistant / Alexa style).
+- STRICT Spoken Length: 1 or 2 short sentences per turn. Treat this as a real live phone call.
+- Natural transitions: "Got it.", "Makes sense.", "Understood.", "Okay.", "Right." (do not overuse the same transition).
+- Adapt automatically to English, Hindi, or conversational Hinglish based on candidate speech.`;
+
+  const modelOverride = extraOverrides?.model === null ? undefined : {
+    provider: extraOverrides?.model?.provider || 'openai',
+    model: extraOverrides?.model?.model || 'gpt-4o-mini',
+    messages: extraOverrides?.model?.messages || [
+      {
+        role: 'system',
+        content: systemPrompt,
+      },
+    ],
+    ...(extraOverrides?.model || {}),
+  };
+
+  // Ensure provider and model are always valid if model object is present
+  if (modelOverride) {
+    if (!modelOverride.provider) {
+      modelOverride.provider = 'openai';
+    }
+    if (!modelOverride.model) {
+      modelOverride.model = 'gpt-4o-mini';
+    }
+  }
+
+  return {
+    silenceTimeoutSeconds: 30, // Strict 30-second wait before silence prompt
+    responseDelaySeconds: 0.5,
+    maxDurationSeconds: 1800,
+    variableValues: {
+      candidate_name: candName,
+      candidate_role: candRole,
+      current_company: currCompany,
+      experience_years: experience,
+      location,
+      notice_period: noticePeriod,
+      current_salary: currentSalary,
+      expected_salary: expectedSalary,
+      role_department: jd.department,
+      role_budget: jd.budgetBand,
+      office_location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram',
+    },
+    ...(modelOverride ? { model: modelOverride } : {}),
+    firstMessage: `Hi ${candName}, I'm Arjun from White Collar Realty calling regarding your application for the ${candRole} position. Do you have a couple of minutes?`,
+    ...(extraOverrides || {}),
+  };
+}
+
+/**
+ * Real-time helper to extract candidate screening answers from conversation transcript messages
+ * for CRM state sync.
+ */
+export function extractScreeningFromTranscript(messages: VapiTranscriptMessage[]): Record<string, any> {
+  const result: Record<string, any> = {};
+  const candidateTexts = messages
+    .filter((m) => m.sender === 'candidate')
+    .map((m) => m.text.toLowerCase());
+  const combined = candidateTexts.join(' ');
+
+  // Company detection
+  const companies = ['dlf', 'm3m', 'square yards', 'anarock', 'godrej', 'emaar', 'sobha', 'proptiger', 'signature global', 'adani'];
+  for (const c of companies) {
+    if (combined.includes(c)) {
+      result.currentCompany = c.toUpperCase();
+      break;
+    }
+  }
+
+  // Experience detection
+  const expMatch = combined.match(/(\d+(?:\.\d+)?)\s*(?:years?|yrs?)/);
+  if (expMatch) {
+    result.realEstateExperienceYears = parseFloat(expMatch[1]);
+  }
+
+  // Notice period detection
+  const noticeMatch = combined.match(/(\d+)\s*(?:days?|din)/);
+  if (noticeMatch) {
+    result.noticePeriodDays = parseInt(noticeMatch[1], 10);
+  } else if (combined.includes('immediate') || combined.includes('turant')) {
+    result.noticePeriodDays = 0;
+  }
+
+  // Location detection
+  if (combined.includes('gurgaon') || combined.includes('gurugram')) {
+    result.currentLocation = 'Gurugram';
+  } else if (combined.includes('delhi')) {
+    result.currentLocation = 'Delhi';
+  } else if (combined.includes('noida')) {
+    result.currentLocation = 'Noida';
+  }
+
+  // Gurgaon exposure
+  if (combined.includes('gurgaon') || combined.includes('golf course') || combined.includes('spr') || combined.includes('dwarka expressway')) {
+    result.gurgaonDubaiExperience = {
+      gurgaon: true,
+      dubai: combined.includes('dubai'),
+      details: 'Active Gurgaon property market exposure',
+    };
+  }
+
+  return result;
+}
+
+/**
  * Vapi Voice Assistant Service for White Collar Realty
  * Enables ultra-low latency, natural turn-taking WebRTC calls
  * using configured Assistant ID: ed825f7a-e951-444b-81a7-1d6917e439c5
@@ -27,6 +403,7 @@ class VapiClientService {
   private callStatus: VapiCallStatus = 'idle';
   private errorMessage: string | null = null;
   private isMutedState: boolean = false;
+  private isRetryingFallback: boolean = false;
 
   private statusListeners: Set<StatusListener> = new Set();
   private transcriptListeners: Set<TranscriptListener> = new Set();
@@ -174,6 +551,10 @@ class VapiClientService {
 
     client.on('error', (err: any) => {
       console.error('Vapi client error:', err);
+      if (this.isRetryingFallback) {
+        console.warn('Vapi client error received during fallback retry; waiting for fallback result.');
+        return;
+      }
       const friendlyMsg = this.formatErrorMessage(err);
       this.errorMessage = friendlyMsg;
       this.setCallStatus('error', friendlyMsg);
@@ -181,6 +562,10 @@ class VapiClientService {
 
     client.on('call-start-failed', (event: any) => {
       console.error('Vapi call-start-failed:', event);
+      if (this.isRetryingFallback) {
+        console.warn('Vapi call-start-failed received during fallback retry; waiting for fallback result.');
+        return;
+      }
       const friendlyMsg = this.formatErrorMessage(event?.error || 'Failed to start call');
       this.errorMessage = friendlyMsg;
       this.setCallStatus('error', friendlyMsg);
@@ -229,47 +614,16 @@ class VapiClientService {
     }
   }
 
+  private lastErrorInfo: VapiErrorInfo | null = null;
+
+  public getLastErrorInfo(): VapiErrorInfo | null {
+    return this.lastErrorInfo;
+  }
+
   private formatErrorMessage(err: any): string {
-    let raw = '';
-    if (typeof err === 'string') {
-      raw = err;
-    } else if (err && typeof err === 'object') {
-      if (typeof err.message === 'string') {
-        raw = err.message;
-      } else if (typeof err.error === 'string') {
-        raw = err.error;
-      } else if (err.error && typeof err.error === 'object' && typeof err.error.message === 'string') {
-        raw = err.error.message;
-      } else {
-        try {
-          raw = JSON.stringify(err);
-        } catch {
-          raw = String(err);
-        }
-      }
-    } else {
-      raw = String(err || '');
-    }
-
-    const lower = (typeof raw === 'string' ? raw : '').toLowerCase();
-
-    if (lower.includes('notallowederror') || lower.includes('permission denied') || lower.includes('microphone')) {
-      return 'Microphone permission was denied. Please allow microphone access in your browser address bar to speak with Arjun.';
-    }
-    if (lower.includes('notfounderror') || lower.includes('device')) {
-      return 'No microphone found. Please connect an audio input device and try again.';
-    }
-    if (lower.includes('public key') || lower.includes('401') || lower.includes('unauthorized') || lower.includes('api key')) {
-      return 'Invalid or missing Vapi Public Key. Please check VITE_VAPI_PUBLIC_KEY in your environment/secrets.';
-    }
-    if (lower.includes('assistant') && (lower.includes('404') || lower.includes('not found'))) {
-      return `Vapi Assistant (ID: ${DEFAULT_VAPI_ASSISTANT_ID}) was not found or is not accessible with this API key.`;
-    }
-    if (lower.includes('webrtc') || lower.includes('network') || lower.includes('ice') || lower.includes('failed to fetch')) {
-      return 'Network connection issue connecting to Vapi audio servers. Please check your internet connection.';
-    }
-
-    return raw || 'An error occurred while connecting to the Vapi voice assistant.';
+    const errorInfo = classifyVoiceError(err);
+    this.lastErrorInfo = errorInfo;
+    return errorInfo.message;
   }
 
   /**
@@ -277,7 +631,9 @@ class VapiClientService {
    */
   public async verifyMicrophonePermission(): Promise<void> {
     if (!navigator?.mediaDevices?.getUserMedia) {
-      throw new Error('Your browser does not support microphone audio capture required for live voice calls.');
+      const errInfo = classifyVoiceError('Your browser does not support microphone audio capture required for live voice calls.');
+      this.lastErrorInfo = errInfo;
+      throw new Error(errInfo.message);
     }
 
     try {
@@ -285,17 +641,15 @@ class VapiClientService {
       // Release test audio tracks immediately so Daily/Vapi WebRTC can bind cleanly
       stream.getTracks().forEach((track) => track.stop());
     } catch (err: any) {
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        throw new Error('Microphone permission was denied. Please allow microphone access in your browser address bar.');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        throw new Error('No microphone detected. Please connect a microphone to continue.');
-      }
-      throw new Error(`Microphone access error: ${err.message || 'Unable to access microphone'}`);
+      const errInfo = classifyVoiceError(err);
+      this.lastErrorInfo = errInfo;
+      throw new Error(errInfo.message);
     }
   }
 
   /**
    * Start a live call with Vapi Assistant
+   * Configured with strict 30-second silence handling and "NEVER ASK THE SAME QUESTION TWICE" rules
    */
   public async startCall(
     assistantId: string = DEFAULT_VAPI_ASSISTANT_ID,
@@ -303,6 +657,7 @@ class VapiClientService {
     explicitKey?: string
   ): Promise<any> {
     this.errorMessage = null;
+    this.lastErrorInfo = null;
     this.setCallStatus('connecting');
 
     try {
@@ -315,13 +670,67 @@ class VapiClientService {
       // 3. Initialize Vapi instance
       const client = this.init(key);
 
-      // 4. Start call using assistant ID
+      // 4. Build refined overrides with 30s pause timeout & anti-repetition directives
+      const baseConfig = assistantOverrides?.candidate
+        ? buildVapiAssistantConfig(assistantOverrides.candidate)
+        : {};
+
+      const mergedOverrides: any = {
+        ...baseConfig,
+        ...(assistantOverrides || {}),
+        silenceTimeoutSeconds: assistantOverrides?.silenceTimeoutSeconds ?? 30, // Strict 30s pause handling
+        responseDelaySeconds: assistantOverrides?.responseDelaySeconds ?? 0.5,
+        variableValues: {
+          ...(baseConfig.variableValues || {}),
+          ...(assistantOverrides?.variableValues || {}),
+        },
+      };
+
+      // Safeguard: Ensure model has valid provider and model if model is present
+      if (mergedOverrides.model) {
+        if (!mergedOverrides.model.provider) {
+          mergedOverrides.model.provider = 'openai';
+        }
+        if (!mergedOverrides.model.model) {
+          mergedOverrides.model.model = 'gpt-4o-mini';
+        }
+      }
+
+      // 5. Start call using assistant ID & merged configuration
       const targetAssistantId = assistantId || DEFAULT_VAPI_ASSISTANT_ID;
-      const call = await client.start(targetAssistantId, assistantOverrides);
+
+      let call;
+      try {
+        call = await client.start(targetAssistantId, mergedOverrides);
+      } catch (err: any) {
+        const errString = typeof err === 'string' ? err : JSON.stringify(err);
+        // If error is related to model provider or assistantOverrides validation, retry without model override
+        if (
+          mergedOverrides.model &&
+          (errString.includes('model') ||
+            errString.includes('provider') ||
+            errString.includes('Bad Request') ||
+            errString.includes('400'))
+        ) {
+          console.warn('Vapi start with model override failed, retrying with assistant native model:', err);
+          this.isRetryingFallback = true;
+          this.setCallStatus('connecting');
+          const { model, ...fallbackOverrides } = mergedOverrides;
+          try {
+            call = await client.start(targetAssistantId, fallbackOverrides);
+          } finally {
+            this.isRetryingFallback = false;
+          }
+        } else {
+          throw err;
+        }
+      }
       return call;
     } catch (err: any) {
       console.error('Error starting Vapi call:', err);
-      const friendlyMsg = this.formatErrorMessage(err);
+      const errorInfo = classifyVoiceError(err);
+      this.lastErrorInfo = errorInfo;
+      const friendlyMsg = errorInfo.message;
       this.errorMessage = friendlyMsg;
       this.setCallStatus('error', friendlyMsg);
       throw new Error(friendlyMsg);

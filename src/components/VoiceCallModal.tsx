@@ -193,9 +193,65 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     });
   };
 
-  // Start listening to candidate speech in real-time
-  const startListening = () => {
+  // Candidate 30-second silence timer: "don't repeat gain after 30 sec ask are you there"
+  const startCandidateSilenceTimer = () => {
+    if (candidateSilenceTimerRef.current) {
+      clearTimeout(candidateSilenceTimerRef.current);
+      candidateSilenceTimerRef.current = null;
+    }
+    if (callStatusRef.current !== 'connected') return;
+
+    candidateSilenceTimerRef.current = setTimeout(() => {
+      triggerAreYouTherePrompt();
+    }, 30000); // exactly 30 seconds
+  };
+
+  // Trigger natural "Are you there?" check without repeating questions
+  const triggerAreYouTherePrompt = () => {
     if (callStatusRef.current !== 'connected' || isAgentSpeakingRef.current) return;
+
+    const areYouTherePhrase = languageMode === 'Hindi'
+      ? 'Hello, kya aap sun pa rahe hain?'
+      : 'Hello, are you there?';
+
+    const checkMsg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      sender: 'agent',
+      text: areYouTherePhrase,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+
+    setTranscript((prev) => [...prev, checkMsg]);
+
+    if (voiceSpeechEnabled) {
+      setIsAgentSpeaking(true);
+      isAgentSpeakingRef.current = true;
+      voiceAudio.speak(areYouTherePhrase, {
+        language: languageMode,
+        onStart: () => {
+          setIsAgentSpeaking(true);
+          isAgentSpeakingRef.current = true;
+        },
+        onEnd: () => {
+          setIsAgentSpeaking(false);
+          isAgentSpeakingRef.current = false;
+          if (liveHandsFreeRef.current && callStatusRef.current === 'connected') {
+            setTimeout(() => {
+              startListening(true);
+            }, 300);
+          }
+          // After asking "Hello, are you there?", wait another 30 seconds without repeating the question
+          startCandidateSilenceTimer();
+        },
+      });
+    } else {
+      startCandidateSilenceTimer();
+    }
+  };
+
+  // Start listening to candidate speech in real-time
+  const startListening = (silent = false) => {
+    if (callStatusRef.current !== 'connected') return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
@@ -211,8 +267,10 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
       recognition.onstart = () => {
         setIsListening(true);
-        // Play subtle listening feedback chime (Google Assistant / Alexa style)
-        voiceAudio.playListeningStartChime();
+        // Play subtle listening feedback chime only if not a silent background restart
+        if (!silent) {
+          voiceAudio.playListeningStartChime();
+        }
       };
 
       recognition.onresult = (event: any) => {
@@ -231,7 +289,11 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
             setIsAgentSpeaking(false);
             isAgentSpeakingRef.current = false;
           }
-          if (candidateSilenceTimerRef.current) clearTimeout(candidateSilenceTimerRef.current);
+          // Reset 30s silence timer since candidate is actively speaking!
+          if (candidateSilenceTimerRef.current) {
+            clearTimeout(candidateSilenceTimerRef.current);
+            candidateSilenceTimerRef.current = null;
+          }
 
           setInputMessage(transcriptResult);
 
@@ -257,13 +319,13 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       recognition.onerror = (e: any) => {
         console.warn('Speech recognition event:', e?.error);
         setIsListening(false);
-        // If silence timeout and handsfree is active, wait and re-listen if still on call
+        // If silence timeout and handsfree is active, silently resume listening without interrupting candidate with chimes or repeating questions
         if (e?.error === 'no-speech' && liveHandsFreeRef.current && callStatusRef.current === 'connected' && !isAgentSpeakingRef.current) {
           setTimeout(() => {
             if (liveHandsFreeRef.current && callStatusRef.current === 'connected' && !isAgentSpeakingRef.current) {
-              startListening();
+              startListening(true);
             }
-          }, 1500);
+          }, 300);
         }
       };
 
@@ -324,6 +386,9 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         onStart: () => {
           setIsAgentSpeaking(true);
           isAgentSpeakingRef.current = true;
+          if (liveHandsFreeRef.current && callStatusRef.current === 'connected') {
+            startListening(true);
+          }
         },
         onEnd: () => {
           setIsAgentSpeaking(false);
@@ -334,8 +399,12 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               startListening();
             }, 400);
           }
+          // Start 30s silence watch: if candidate does not speak in 30s, gently ask "Are you there?"
+          startCandidateSilenceTimer();
         },
       });
+    } else {
+      startCandidateSilenceTimer();
     }
   };
 
@@ -366,11 +435,13 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     isAgentSpeakingRef.current = false;
     if (candidateSilenceTimerRef.current) clearTimeout(candidateSilenceTimerRef.current);
     startListening();
+    startCandidateSilenceTimer();
   };
 
-  // Rule 5: Candidate silence simulation
+  // Rule 9 & User Request: Candidate silence simulation / testing (Ask "Are you there?" after 30s instead of repeating question)
   const handleSimulateSilence = () => {
-    handleSendMessage('[Candidate is silent / pausing]');
+    if (candidateSilenceTimerRef.current) clearTimeout(candidateSilenceTimerRef.current);
+    triggerAreYouTherePrompt();
   };
 
   // Send candidate utterance to AI backend via real-time streaming endpoint
@@ -466,6 +537,9 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               onStart: () => {
                 setIsAgentSpeaking(true);
                 isAgentSpeakingRef.current = true;
+                if (liveHandsFreeRef.current && callStatusRef.current === 'connected') {
+                  startListening(true);
+                }
               },
               onEnd: () => {
                 if (!voiceAudio.isSpeaking()) {
@@ -514,6 +588,9 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               onStart: () => {
                 setIsAgentSpeaking(true);
                 isAgentSpeakingRef.current = true;
+                if (liveHandsFreeRef.current && callStatusRef.current === 'connected') {
+                  startListening(true);
+                }
               },
               onEnd: () => {
                 if (!voiceAudio.isSpeaking()) {
@@ -524,6 +601,8 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                       startListening();
                     }, 150);
                   }
+                  // Start 30s silence watch: if candidate takes time to speak, ask "Are you there?" without repeating question
+                  startCandidateSilenceTimer();
                 }
               },
             });
@@ -658,6 +737,8 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                   startListening();
                 }, 400);
               }
+              // Start 30s silence watch
+              startCandidateSilenceTimer();
             },
           });
         }
@@ -671,6 +752,10 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
   // End Call & Commit Changes
   const handleEndCall = async () => {
+    if (candidateSilenceTimerRef.current) {
+      clearTimeout(candidateSilenceTimerRef.current);
+      candidateSilenceTimerRef.current = null;
+    }
     voiceAudio.stopSpeaking();
     voiceAudio.playDisconnectTone();
     setCallStatus('ended');
@@ -1103,9 +1188,9 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                   onClick={handleSimulateSilence}
                   disabled={isProcessing}
                   className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 text-[11px] font-semibold border border-slate-700 transition cursor-pointer"
-                  title="Rule 9: Test candidate silence handling ('Take your time.')"
+                  title="Test candidate silence: Arjun gently asks 'Are you there?' without repeating question after 30s"
                 >
-                  <span>⏳ Test Silence (Rule 9)</span>
+                  <span>⏳ Test Silence (&quot;Are you there?&quot;)</span>
                 </button>
               </div>
             ) : isProcessing ? (
@@ -1125,9 +1210,9 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                     onClick={handleSimulateSilence}
                     disabled={isProcessing}
                     className="px-2 py-0.5 rounded-md bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-amber-300 text-[10px] font-medium border border-slate-700/80 transition cursor-pointer"
-                    title="Rule 9: Test candidate silence handling ('Take your time.')"
+                    title="Test candidate silence: Arjun gently asks 'Are you there?' without repeating question after 30s"
                   >
-                    <span>⏳ Test Silence (Rule 9)</span>
+                    <span>⏳ Test Silence (&quot;Are you there?&quot;)</span>
                   </button>
                 </div>
               )
