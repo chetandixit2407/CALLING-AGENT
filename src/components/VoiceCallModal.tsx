@@ -914,11 +914,21 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
     // Default Screening Chips
     const turns = transcript.filter((m) => m.sender === 'candidate').length;
+    const commonGoogleAssistantChips = [
+      { label: '🌟 Dubai Exp (Rule 5)', text: "I've worked in Dubai real estate for three years." },
+      { label: '🌟 Multi-Entity: ABC Realty 4y + 2y Dubai (Rule 6)', text: "I'm currently working with ABC Realty, it's been around four years, but before that I was in Dubai for two years." },
+      { label: '🌟 Q: Office location? (Rule 14)', text: 'What is the office location?' },
+      { label: '🌟 Wait, let me check (Rule 12)', text: 'Wait, let me check.' },
+      { label: '🌟 Correction: 4y not 5y (Rule 11)', text: 'No, sorry, I meant four years, not five.' },
+      { label: '🌟 Hinglish: Gurgaon work (Rule 16)', text: 'Main abhi Gurgaon mein hi work kar raha hoon.' },
+    ];
+
     if (turns === 0) {
       return [
         { label: 'Yes, speaking (Rule 12)', text: 'Yes, speaking.' },
         { label: 'Hindi: Haanji, main bol raha hu', text: 'Haanji, main bol raha hoon.' },
         { label: 'Wrong number (Rule 12)', text: 'No, this is wrong number. Nobody by that name here.' },
+        ...commonGoogleAssistantChips,
       ];
     } else if (turns === 1) {
       return [
@@ -928,6 +938,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         { label: 'Driving / Callback (Rule 11)', text: 'I am driving right now on Golf Course Road. Please call me back today at 5:30 PM.' },
         { label: 'Already Joined Other Firm (Rule 30)', text: 'Actually I have already joined another real estate company last week.' },
         { label: 'Not Interested (Rule 10)', text: 'I am not looking to switch right now. Please close my application.' },
+        ...commonGoogleAssistantChips,
       ];
     } else if (turns === 2) {
       return [
@@ -936,18 +947,22 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         { label: 'DLF Consultant, Dubai + Gurgaon', text: 'Currently with DLF Homes as Consultant. 5 years real estate experience with both Gurgaon and Dubai sales.' },
         { label: 'Off-Topic: Financial Sales (Rule 8)', text: 'I worked in insurance and mutual fund sales in Delhi before moving here.' },
         { label: 'Uncertain: Don\'t Know Volume (Rule 9)', text: 'I do not know my exact quarterly sales volume off the top of my head.' },
+        ...commonGoogleAssistantChips,
       ];
     } else if (turns === 3) {
       return [
         { label: 'CTC: 10 LPA Present, 14 Expected (Rule 19)', text: 'My current fixed salary is 10 LPA and I am expecting around 14 LPA.' },
         { label: 'Prefer Not To Disclose (Rule 20)', text: 'I would prefer not to disclose my current salary right now, but I am expecting around 13 to 14 LPA.' },
         { label: 'CTC: 8 LPA Present, 11 Expected', text: 'Current is 8 LPA fixed, expecting 10 to 12 LPA based on incentives.' },
+        { label: 'Mostly off-plan (Dubai dynamic)', text: 'Mostly off-plan.' },
+        ...commonGoogleAssistantChips,
       ];
     } else if (turns === 4) {
       return [
         { label: 'Gurgaon, 15 Days Notice (Rule 21)', text: 'I stay in Sector 54 Gurgaon, and my notice period is 15 days.' },
         { label: '30 Days / Buyout Negotiable (Rule 21)', text: 'My notice period is 30 days, but I can negotiate an early buyout with my current employer.' },
         { label: 'Immediate Joiner, DLF Phase 2', text: 'I stay in DLF Phase 2 Gurugram, ready to join immediately as I have served my notice.' },
+        ...commonGoogleAssistantChips,
       ];
     } else {
       return [
@@ -955,6 +970,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         { label: 'Confirm Tomorrow 04:30 PM (Rule 22)', text: 'Tomorrow at 4:30 PM fits my schedule best.' },
         { label: 'Reschedule: Friday 12:00 PM (Rule 23)', text: 'Can we reschedule to Friday at 12:00 PM instead?' },
         { label: 'Cancel Interview (Rule 24)', text: 'I would like to cancel the interview completely.' },
+        ...commonGoogleAssistantChips,
       ];
     }
   };
@@ -1046,57 +1062,72 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               </button>
             </div>
 
-            {/* Speaking Waveform / Mic Live Animation */}
+            {/* Google Assistant / Alexa Style Dynamic Voice Waveform & Mic Live Animation */}
             {isAgentSpeaking ? (
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-amber-500/15 px-2.5 py-1 rounded-md border border-amber-500/30 text-[11px] text-amber-300">
-                  <span className="w-1 h-3 bg-amber-400 animate-bounce" />
-                  <span className="w-1 h-4 bg-amber-400 animate-bounce delay-75" />
-                  <span className="w-1 h-2 bg-amber-400 animate-bounce delay-150" />
-                  <span className="w-1 h-3.5 bg-amber-400 animate-bounce delay-100" />
-                  <span className="font-semibold">Pooja Speaking...</span>
+                <div className="flex items-center gap-1.5 bg-amber-500/15 px-2.5 py-1 rounded-lg border border-amber-500/30 text-[11px] text-amber-300">
+                  <div className="flex items-end gap-0.5 h-3.5 px-0.5">
+                    <span className="w-1 h-2.5 bg-blue-400 animate-bounce rounded-full" />
+                    <span className="w-1 h-3.5 bg-rose-400 animate-bounce delay-75 rounded-full" />
+                    <span className="w-1 h-2 bg-amber-400 animate-bounce delay-150 rounded-full" />
+                    <span className="w-1 h-3 bg-emerald-400 animate-bounce delay-100 rounded-full" />
+                  </div>
+                  <span className="font-bold tracking-tight">Pooja Speaking (1-2 sentences)...</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleInterruptAgent}
-                  className="px-2.5 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 hover:text-rose-200 border border-rose-500/40 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer animate-pulse"
-                  title="Rule 6: Immediately stop Pooja speaking when candidate speaks or interrupts"
+                  className="px-2.5 py-1 rounded-lg bg-rose-500/25 hover:bg-rose-500/35 text-rose-200 border border-rose-500/50 text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs animate-pulse ring-2 ring-rose-500/20"
+                  title="Rule 8: Candidate interrupts / barge-in — immediately stops Pooja speaking"
                 >
-                  <span>⚡ Interrupt Pooja (Rule 6)</span>
+                  <VolumeX className="w-3.5 h-3.5" />
+                  <span>⚡ Interrupt Pooja (Rule 8 Barge-In)</span>
                 </button>
               </div>
             ) : isListening ? (
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-emerald-500/15 px-2.5 py-1 rounded-md border border-emerald-500/30 text-[11px] text-emerald-300 animate-pulse">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-0.5" />
-                  <span className="font-semibold">Candidate Mic Live (Speak naturally)...</span>
+                <div className="flex items-center gap-1.5 bg-cyan-950/70 px-2.5 py-1 rounded-lg border border-cyan-500/40 text-[11px] text-cyan-200 shadow-xs">
+                  {/* Google Assistant 4-color pulsing dots */}
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#4285F4] animate-ping" />
+                    <span className="w-2 h-2 rounded-full bg-[#EA4335] animate-pulse delay-75" />
+                    <span className="w-2 h-2 rounded-full bg-[#FBBC05] animate-pulse delay-150" />
+                    <span className="w-2 h-2 rounded-full bg-[#34A853] animate-pulse delay-100" />
+                  </div>
+                  <span className="font-semibold text-white ml-1">Assistant Listening (Hands-free)...</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleSimulateSilence}
                   disabled={isProcessing}
-                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 text-[10px] font-semibold border border-slate-700 transition cursor-pointer"
-                  title="Rule 5: Test candidate silence handling ('Take your time.')"
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 text-[11px] font-semibold border border-slate-700 transition cursor-pointer"
+                  title="Rule 9: Test candidate silence handling ('Take your time.')"
                 >
-                  <span>⏳ Test Silence (Rule 5)</span>
+                  <span>⏳ Test Silence (Rule 9)</span>
                 </button>
               </div>
             ) : isProcessing ? (
-              <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700 text-slate-300 text-[11px]">
-                <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
-                <span>Pooja analyzing response...</span>
+              <div className="flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1 rounded-lg border border-slate-700 text-slate-200 text-[11px]">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                <span>Thinking & analyzing input...</span>
               </div>
             ) : (
               callStatus === 'connected' && (
-                <button
-                  type="button"
-                  onClick={handleSimulateSilence}
-                  disabled={isProcessing}
-                  className="px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-amber-300 text-[10px] font-medium border border-slate-700/80 transition cursor-pointer"
-                  title="Rule 5: Test candidate silence handling ('Take your time.')"
-                >
-                  <span>⏳ Test Silence (Rule 5)</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800/60 border border-slate-700/60 text-[10px] text-slate-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span>Google Assistant / Alexa Voice Active</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSimulateSilence}
+                    disabled={isProcessing}
+                    className="px-2 py-0.5 rounded-md bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-amber-300 text-[10px] font-medium border border-slate-700/80 transition cursor-pointer"
+                    title="Rule 9: Test candidate silence handling ('Take your time.')"
+                  >
+                    <span>⏳ Test Silence (Rule 9)</span>
+                  </button>
+                </div>
               )
             )}
           </div>
