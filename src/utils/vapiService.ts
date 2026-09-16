@@ -2,7 +2,7 @@ import Vapi from '@vapi-ai/web';
 
 export const DEFAULT_VAPI_ASSISTANT_ID = 'ed825f7a-e951-444b-81a7-1d6917e439c5';
 
-export type VapiCallStatus = 'idle' | 'connecting' | 'active' | 'ended' | 'error';
+export type VapiCallStatus = 'idle' | 'connecting' | 'active' | 'ended' | 'error' | 'key_required';
 
 export interface VapiTranscriptMessage {
   id: string;
@@ -34,29 +34,83 @@ class VapiClientService {
   private speakingListeners: Set<SpeakingListener> = new Set();
 
   /**
+   * Save a user-supplied Vapi Public Key locally and in session
+   */
+  public setStoredPublicKey(key: string): void {
+    if (!key || typeof key !== 'string') return;
+    const trimmed = key.trim();
+    if (trimmed.length > 5) {
+      this.currentApiKey = trimmed;
+      try {
+        localStorage.setItem('VAPI_PUBLIC_KEY', trimmed);
+      } catch (e) {
+        // LocalStorage might be restricted in some iframes
+      }
+      // Also notify server to cache
+      fetch('/api/vapi-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey: trimmed }),
+      }).catch(() => {});
+    }
+  }
+
+  /**
+   * Retrieve cached public key if available
+   */
+  public getStoredPublicKey(): string | null {
+    if (this.currentApiKey) return this.currentApiKey;
+    try {
+      const stored = localStorage.getItem('VAPI_PUBLIC_KEY') || localStorage.getItem('vapi_public_key');
+      if (stored && stored.trim().length > 5 && !stored.startsWith('npm')) {
+        this.currentApiKey = stored.trim();
+        return this.currentApiKey;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  /**
+   * Quick check if a public key is configured without throwing
+   */
+  public async isKeyConfigured(): Promise<boolean> {
+    try {
+      const key = await this.resolvePublicKey();
+      return Boolean(key && key.length > 5);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Resolves the Vapi Public Key securely.
    * Priority:
    * 1. Explicitly passed parameter
-   * 2. Fetched from server /api/vapi-config (checks process.env.VAPI_PUBLIC_KEY)
-   * 3. import.meta.env.VITE_VAPI_PUBLIC_KEY
+   * 2. In-memory cached key or localStorage
+   * 3. Fetched from server /api/vapi-config (checks process.env.VAPI_PUBLIC_KEY)
+   * 4. import.meta.env.VITE_VAPI_PUBLIC_KEY
    */
   public async resolvePublicKey(explicitKey?: string): Promise<string> {
     if (explicitKey?.trim()) {
-      return explicitKey.trim();
+      const cleaned = explicitKey.trim();
+      this.currentApiKey = cleaned;
+      return cleaned;
     }
 
-    if (this.currentApiKey) {
-      return this.currentApiKey;
+    // Check localStorage or cached
+    const stored = this.getStoredPublicKey();
+    if (stored) {
+      return stored;
     }
 
-    // Check server endpoint first (has sanitized key from container environment)
+    // Check server endpoint (has sanitized key from container environment)
     try {
       const res = await fetch('/api/vapi-config');
       if (res.ok) {
         const data = await res.json();
         if (data.publicKey && typeof data.publicKey === 'string' && data.publicKey.trim()) {
           const trimmed = data.publicKey.trim();
-          if (!trimmed.startsWith('npm') && trimmed.length > 8) {
+          if (!trimmed.startsWith('npm') && trimmed.length > 5) {
             this.currentApiKey = trimmed;
             return this.currentApiKey;
           }
@@ -70,14 +124,14 @@ class VapiClientService {
     const clientKey = (import.meta as any).env?.VITE_VAPI_PUBLIC_KEY;
     if (clientKey && typeof clientKey === 'string' && clientKey.trim()) {
       const trimmed = clientKey.trim();
-      if (!trimmed.startsWith('npm') && trimmed.length > 8) {
+      if (!trimmed.startsWith('npm') && trimmed.length > 5) {
         this.currentApiKey = trimmed;
         return this.currentApiKey;
       }
     }
 
     throw new Error(
-      'Vapi Public API Key not detected in environment secrets. Please configure VITE_VAPI_PUBLIC_KEY or VAPI_PUBLIC_KEY in your environment/settings to start the voice assistant.'
+      'Vapi Public API Key not detected. Please provide your Vapi Public Key to connect to the live assistant.'
     );
   }
 

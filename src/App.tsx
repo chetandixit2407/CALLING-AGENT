@@ -376,6 +376,13 @@ export default function App() {
       <Header
         onNewCandidate={() => setShowNewCandidateModal(true)}
         onQuickStartCall={() => handleStartVapiCall()}
+        onStartInteractiveCall={() => {
+          const targetCandidate =
+            selectedCandidate ||
+            candidates.find((c) => c.status === 'Screening Pending') ||
+            candidates[0];
+          handleStartCall(targetCandidate, 'screening');
+        }}
         onEndCall={handleEndVapiCall}
         vapiCallStatus={vapiCallStatus}
         activeCandidateCount={candidates.length}
@@ -945,6 +952,10 @@ export default function App() {
             if (selectedCandidate?.id === updatedCandidate.id) {
               setSelectedCandidate(updatedCandidate);
             }
+          }}
+          onSwitchToInteractive={(cand) => {
+            setShowVapiModal(false);
+            handleStartCall(cand, 'screening');
           }}
         />
       )}

@@ -6,6 +6,7 @@ import { VapiCallStatus } from '../utils/vapiService';
 interface HeaderProps {
   onNewCandidate: () => void;
   onQuickStartCall: () => void;
+  onStartInteractiveCall?: () => void;
   onEndCall?: () => void;
   vapiCallStatus?: VapiCallStatus;
   activeCandidateCount: number;
@@ -14,6 +15,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onNewCandidate,
   onQuickStartCall,
+  onStartInteractiveCall,
   onEndCall,
   vapiCallStatus = 'idle',
   activeCandidateCount,
@@ -98,15 +100,29 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
-            {(vapiCallStatus === 'idle' || vapiCallStatus === 'ended' || vapiCallStatus === 'error') && (
-              <button
-                id="btn-quick-call-start"
-                onClick={onQuickStartCall}
-                className="inline-flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-4 py-2 rounded-lg shadow-md shadow-amber-500/20 transition active:scale-95"
-              >
-                <PhoneCall className="w-3.5 h-3.5" />
-                <span>Start Voice Screening</span>
-              </button>
+            {(vapiCallStatus === 'idle' || vapiCallStatus === 'ended' || vapiCallStatus === 'error' || vapiCallStatus === 'key_required') && (
+              <div className="flex items-center gap-2">
+                {onStartInteractiveCall && (
+                  <button
+                    id="btn-interactive-call-start"
+                    onClick={onStartInteractiveCall}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 px-3 py-2 rounded-lg transition active:scale-95 shadow-xs"
+                    title="Start Voice Screening with AI Recruiter Arjun"
+                  >
+                    <PhoneCall className="w-3.5 h-3.5 text-amber-400" />
+                    <span>AI Voice Recruiter</span>
+                  </button>
+                )}
+                <button
+                  id="btn-quick-call-start"
+                  onClick={onQuickStartCall}
+                  className="inline-flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-4 py-2 rounded-lg shadow-md shadow-amber-500/20 transition active:scale-95"
+                  title="Connect via Vapi WebRTC"
+                >
+                  <PhoneCall className="w-3.5 h-3.5" />
+                  <span>Vapi Live Call</span>
+                </button>
+              </div>
             )}
           </div>
         </div>

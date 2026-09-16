@@ -46,15 +46,19 @@ function cleanVapiPublicKey(rawKey?: string): string {
   if (!rawKey || typeof rawKey !== 'string') return '';
   const trimmed = rawKey.trim();
   // Filter out accidental shell command values like 'npm install ...'
-  if (trimmed.startsWith('npm ') || trimmed.includes('install') || trimmed.length < 10) {
+  if (trimmed.startsWith('npm ') || trimmed.includes('install') || trimmed.length < 5) {
     return '';
   }
   return trimmed;
 }
 
+// Memory store for runtime configured Vapi credentials
+let runtimeVapiPublicKey: string = '';
+
 // Vapi public configuration endpoint (safe: only returns public key and assistant ID)
 app.get('/api/vapi-config', (req, res) => {
   const publicKey =
+    runtimeVapiPublicKey ||
     cleanVapiPublicKey(process.env.VAPI_PUBLIC_KEY) ||
     cleanVapiPublicKey(process.env.VITE_VAPI_PUBLIC_KEY) ||
     cleanVapiPublicKey(process.env.VAPI_PUBLIC_API_KEY) ||
@@ -68,6 +72,19 @@ app.get('/api/vapi-config', (req, res) => {
     publicKey,
     assistantId,
     configured: Boolean(publicKey),
+  });
+});
+
+// Allow saving Vapi key dynamically at runtime
+app.post('/api/vapi-config', (req, res) => {
+  const { publicKey } = req.body || {};
+  const cleaned = cleanVapiPublicKey(publicKey);
+  if (cleaned) {
+    runtimeVapiPublicKey = cleaned;
+  }
+  res.json({
+    success: true,
+    configured: Boolean(runtimeVapiPublicKey),
   });
 });
 
@@ -1298,7 +1315,7 @@ Respond to the candidate and extract any new details.
 `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: conversationPrompt,
       config: {
         systemInstruction,
@@ -1397,7 +1414,7 @@ Respond to the candidate and extract any new details.
 `;
 
     const responseStream = await ai.models.generateContentStream({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: conversationPrompt,
       config: {
         systemInstruction,
@@ -1521,7 +1538,7 @@ Rule 37: Generate structured after-call action for HR system with exact screenin
 `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         thinkingConfig: {
