@@ -41,31 +41,168 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Helper to determine role budget and pitch for White Collar Realty
-function getRoleBudgetInfo(roleName?: string) {
-  const r = (roleName || '').toLowerCase();
-  if (r.includes('lead') || r.includes('manager') || r.includes('dubai')) {
-    return {
-      fixedBudget: '14 - 22 LPA fixed',
-      totalOte: '25 - 35 LPA OTE with luxury closings',
-      seniority: 'Leadership / Senior Desk',
-    };
-  } else if (r.includes('associate') || r.includes('advisor')) {
-    return {
-      fixedBudget: '6 - 10 LPA fixed',
-      totalOte: '12 - 18 LPA OTE with incentives',
-      seniority: 'Direct Sales Associate',
-    };
-  }
-  return {
+// White Collar Realty Job Descriptions & Specifications
+interface RoleJDInfo {
+  title: string;
+  department: string;
+  location: string;
+  minExperienceYears: number;
+  minRealEstateExpYears: number;
+  fixedBudget: string;
+  totalOte: string;
+  seniority: string;
+  marketFocus: string;
+  noticePeriodExpectation: string;
+  responsibilities: string[];
+  requiredSkills: string[];
+  roleSpecificQuestions: string[];
+}
+
+const WHITE_COLLAR_JDS: Record<string, RoleJDInfo> = {
+  sales_manager: {
+    title: 'Sales Manager (Luxury Real Estate)',
+    department: 'Luxury Residential & Commercial Sales (Gurgaon & Dubai)',
+    location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
+    minExperienceYears: 4,
+    minRealEstateExpYears: 3,
+    fixedBudget: '14 - 22 LPA fixed',
+    totalOte: '25 - 35 LPA OTE with luxury closings',
+    seniority: 'Leadership / Squad Head',
+    marketFocus: 'Gurgaon Luxury Corridors (Golf Course Ext, SPR, Dwarka Expressway) & Dubai Freehold',
+    noticePeriodExpectation: 'Immediate to 30 days max',
+    responsibilities: [
+      'Lead and mentor a high-performing squad of 8 to 15 Property Consultants',
+      'Drive monthly gross booking targets of ₹15–30 Cr across DLF, M3M, Godrej, Emaar, and Sobha inventories',
+      'Conduct high-ticket negotiations and closing meetings with HNIs and NRI investors',
+      'Facilitate client investment roadshows for Dubai off-plan luxury projects',
+    ],
+    requiredSkills: [
+      'Team Leadership & Squad Target Accountability',
+      'High-Ticket Real Estate Negotiation & Closing',
+      'Gurugram Circle Rates, RERA & Dubai Freehold Regulations',
+      'HNI & Corporate Network in Delhi NCR',
+    ],
+    roleSpecificQuestions: [
+      'How large was the sales team you were managing in your last role?',
+      'Were you personally accountable for monthly squad targets, and what was your run-rate?',
+      'Which Gurgaon luxury developer projects or Dubai portfolios have you actively closed?',
+      'What has been your average ticket size and closing conversion ratio?',
+    ],
+  },
+  property_consultant: {
+    title: 'Property Consultant / Senior Property Consultant',
+    department: 'Direct Sales & HNI Client Advisory',
+    location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
+    minExperienceYears: 2,
+    minRealEstateExpYears: 1.5,
     fixedBudget: '10 - 16 LPA fixed',
-    totalOte: '18 - 25 LPA OTE',
+    totalOte: '18 - 25 LPA OTE with direct transaction commissions',
     seniority: 'Property Consultant / Specialist',
+    marketFocus: 'Gurugram Primary Luxury Residential & High-Street Commercial Corridors',
+    noticePeriodExpectation: 'Immediate to 30 days',
+    responsibilities: [
+      'Manage end-to-end buyer journey from qualified lead engagement to site visit and booking',
+      'Present luxury residential layouts (₹2 Cr – ₹15 Cr+) and commercial retail assets to clients',
+      'Coordinate site visits at M3M, DLF, SmartWorld, and Elan sites across Gurugram',
+      'Negotiate terms and facilitate booking documentation per developer guidelines',
+    ],
+    requiredSkills: [
+      'Consultative Property Selling & Lead Conversion',
+      'Gurugram Micro-Market & Infrastructure Understanding',
+      'Relationship Building with HNI Buyers',
+      'Fluent Spoken English & Corporate Communication',
+    ],
+    roleSpecificQuestions: [
+      'How many years have you been handling direct real estate property sales in Gurgaon?',
+      'What category of properties (Luxury Residential, Plots, or Commercial) have you primarily closed?',
+      'What has been your typical monthly lead-to-site-visit and booking conversion rate?',
+      'Have you closed any deals in Golf Course Extension Road or SPR in the last 6 months?',
+    ],
+  },
+  business_development: {
+    title: 'Business Development Manager / Corporate Sales',
+    department: 'Institutional & Channel Partner Sales',
+    location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
+    minExperienceYears: 3,
+    minRealEstateExpYears: 2,
+    fixedBudget: '6 - 10 LPA fixed',
+    totalOte: '12 - 18 LPA OTE with incentives',
+    seniority: 'Direct Sales Associate',
+    marketFocus: 'Delhi NCR Corporate Alliances & Channel Partner Network',
+    noticePeriodExpectation: 'Immediate to 30 days',
+    responsibilities: [
+      'Onboard and activate tier-1 Channel Partners and independent wealth brokers across NCR',
+      'Structure joint customer engagement sessions and project launch briefings',
+      'Drive corporate tie-ups with MNCs across Cyber City, Golf Course Road, and Udyog Vihar',
+    ],
+    requiredSkills: [
+      'Channel Partner Network Development',
+      'B2B Corporate Real Estate Presentation',
+      'Revenue Forecasting and Pipeline Review',
+    ],
+    roleSpecificQuestions: [
+      'How many active Channel Partners did you manage in your network in Gurgaon?',
+      'Have you handled corporate desk activations or NRI roadshows?',
+      'What was your average monthly revenue generated through broker networks?',
+    ],
+  },
+};
+
+// Helper to determine role budget and pitch for White Collar Realty
+function getRoleBudgetInfo(roleName?: string): RoleJDInfo {
+  const r = (roleName || '').toLowerCase();
+  if (r.includes('lead') || r.includes('manager') || r.includes('dubai') || r.includes('head') || r.includes('vp')) {
+    return WHITE_COLLAR_JDS['sales_manager'];
+  } else if (r.includes('associate') || r.includes('advisor') || r.includes('bd') || r.includes('business')) {
+    return WHITE_COLLAR_JDS['business_development'];
+  }
+  return WHITE_COLLAR_JDS['property_consultant'];
+}
+
+function mapStatusToHrOutcome(statusRec?: string, intent?: string): string {
+  if (intent === 'cancel_decline' || statusRec?.includes('Declined')) return 'NOT_INTERESTED';
+  if (intent === 'request_callback' || statusRec?.includes('Callback')) return 'CALL_BACK_REQUESTED';
+  if (intent === 'confirm_interview' || statusRec?.includes('Interview Scheduled')) return 'INTERVIEW_SCHEDULED';
+  if (intent === 'reschedule') return 'INTERVIEW_RESCHEDULE_REQUIRED';
+  if (statusRec?.includes('Ready for Interview') || intent === 'already_joined_negotiation') return 'INTERVIEW_ELIGIBLE';
+  if (statusRec?.includes('Screening Pending') || intent === 'screening_answer') return 'SCREENING_COMPLETED';
+  return 'FOLLOW_UP_REQUIRED';
+}
+
+function enrichFallbackWithMemoryAndOutcome(raw: any, candidate: any, userMessage: string): any {
+  const hrDecisionOutcome = raw.hrDecisionOutcome || mapStatusToHrOutcome(raw.statusRecommendation, raw.detectedIntent);
+  const conversationMemory = raw.conversationMemory || {
+    candidate_name: candidate?.name || 'Candidate',
+    target_role: candidate?.appliedRole || 'Property Consultant',
+    current_company: raw.extractedFields?.currentCompany || candidate?.screening?.currentCompany || '',
+    designation: raw.extractedFields?.currentDesignation || candidate?.screening?.currentDesignation || '',
+    total_experience: raw.extractedFields?.totalExperienceYears ? `${raw.extractedFields.totalExperienceYears} years` : (candidate?.screening?.totalExperienceYears ? `${candidate?.screening?.totalExperienceYears} years` : ''),
+    real_estate_experience: raw.extractedFields?.realEstateExperienceYears ? `${raw.extractedFields.realEstateExperienceYears} years` : (candidate?.screening?.realEstateExperienceYears ? `${candidate?.screening?.realEstateExperienceYears} years` : ''),
+    gurgaon_experience: raw.extractedFields?.gurgaonDubaiExperience?.gurgaon ? 'Yes' : 'Unconfirmed',
+    dubai_experience: raw.extractedFields?.gurgaonDubaiExperience?.dubai ? 'Yes' : 'No',
+    current_salary: raw.extractedFields?.currentSalaryLPA || candidate?.screening?.currentSalaryLPA || '',
+    expected_salary: raw.extractedFields?.expectedSalaryLPA || candidate?.screening?.expectedSalaryLPA || '',
+    salary_not_disclosed: false,
+    current_location: raw.extractedFields?.currentLocation || candidate?.screening?.currentLocation || '',
+    notice_period: raw.extractedFields?.noticePeriodDays !== undefined ? `${raw.extractedFields.noticePeriodDays} days` : '',
+    earliest_joining_date: raw.extractedFields?.earliestJoiningDate || '',
+    interested: raw.statusRecommendation?.includes('Declined') ? 'No' : 'Yes',
+    interview_date: raw.selectedSlotId ? 'Scheduled' : '',
+    interview_time: '',
+    conversation_status: hrDecisionOutcome,
+    missing_information: [],
+    next_action: raw.statusRecommendation || 'Review candidate responses',
+  };
+
+  return {
+    ...raw,
+    hrDecisionOutcome,
+    conversationMemory,
   };
 }
 
 // Robust conversational generator with company requirement & budget negotiation handling
-function generateFallbackResponse(
+function computeRawFallbackResponse(
   scenario: string,
   userMessage: string,
   candidate: any,
@@ -385,83 +522,176 @@ function generateFallbackResponse(
   }
 }
 
+function generateFallbackResponse(
+  scenario: string,
+  userMessage: string,
+  candidate: any,
+  transcript: any[],
+  availableSlots: any[]
+) {
+  const raw = computeRawFallbackResponse(scenario, userMessage, candidate, transcript, availableSlots);
+  return enrichFallbackWithMemoryAndOutcome(raw, candidate, userMessage);
+}
+
 // Shared prompt builder for White Collar Realty Virtual HR Recruiter
 function createSystemInstruction(candidate: any, scenario: string, availableSlotsText: string) {
   const roleInfo = getRoleBudgetInfo(candidate?.appliedRole);
 
   return `
-You are "Pooja", the Virtual HR Assistant for "White Collar Realty", a premier luxury real estate advisory firm in Gurgaon and Dubai.
-Your office is located at: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101.
+# WHITE COLLAR REALTY — AI HR VOICE RECRUITER ("POOJA")
 
-Authentic Indian Voice, Accent & Conversational Flow:
+You are "Pooja", the Virtual HR Assistant of White Collar Realty, a premier luxury real estate advisory firm in Gurgaon and Dubai.
+Office HQ: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101.
+
+Your job is to conduct natural, human-like HR recruitment conversations with candidates over voice.
+You are NOT a question-reading bot. You must behave like an experienced human HR recruiter who listens carefully, understands what the candidate actually said, decides what to ask next, naturally handles pauses and interruptions, and maintains a natural conversational rhythm.
+
+---
+
+## CONVERSATIONAL CONSTRAINTS & AUTHENTIC INDIAN ACCENT:
 - Persona: Professional, friendly, authentic Indian corporate HR recruiter (Delhi NCR real estate style).
 - Speech Style: Warm, courteous, natural spoken Indian English with seamless conversational Hinglish capabilities.
-- Conversational Real-Time Rule: STRICTLY limit your reply to 1 or 2 spoken sentences maximum per turn. Treat this as a real live phone call. Never deliver a lecture or monologue!
-- Active Listening & Natural Acknowledgments: Always start by warmly acknowledging what the candidate just said using natural conversational cues: "Right, got it!", "Understood", "Sure, no problem at all", "Okay great", "Certainly", "Ji bilkul".
-- Dynamic Language Matching: If the candidate speaks Hindi or Hinglish, immediately respond in natural corporate Hinglish. If the candidate speaks English, respond in fluent Indian corporate English.
-- Candidate you are speaking with: ${candidate?.name || 'Candidate'}
-- Candidate applied role: ${candidate?.appliedRole || 'Real Estate Consultant'}
-- Target Role Budget & Scope: Fixed ${roleInfo.fixedBudget}, OTE ${roleInfo.totalOte} (${roleInfo.seniority}).
-- Current Call Scenario: "${scenario}" (can be 'screening', 'reminder', 'missed_followup', or 'callback_followup').
+- STRICT Spoken Length Rule: STRICTLY limit your reply to 1 or 2 spoken sentences maximum per turn. Treat this as a real live phone call. Never deliver a lecture or monologue!
+- Active Listening & Natural Transitions: Start with natural conversational cues: "Right, got it", "Understood", "That makes sense", "Sure", "Okay great", "Just to clarify...", "That's helpful", "Ji bilkul".
+- Avoid Repetitive Robot Words: Never repeatedly say "Certainly", "Absolutely", or "Thank you for providing that information".
+- Dynamic Language Matching: If the candidate speaks Hindi or Hinglish, respond in natural corporate Hinglish. If English, respond in fluent Indian corporate English.
 
-Key Objectives by Scenario:
-1. "screening":
-   Introduce yourself warmly as White Collar Realty HR if this is the start of the call.
-   Ask ONLY 1 concise question at a time to keep real-time conversation flowing naturally:
-   - Current company and current designation.
-   - Total work experience & relevant real estate experience (in years).
-   - Experience selling Gurgaon and/or Dubai luxury properties.
-   - Present salary (CTC) and expected salary.
-   - Current location in NCR.
-   - Notice period and earliest joining date.
-   - Invite for a face-to-face round at Sector 67 Gurugram office (M3M Urbana Business Park) picking from available slots!
+---
 
-2. "reminder":
-   Reconfirm candidate's attendance for their scheduled face-to-face interview at White Collar Realty HQ (Sector 67 Gurugram).
-   If candidate confirms: Reiterate venue, time, and say you look forward to meeting them.
-   If candidate needs to reschedule: Propose alternate open slots from available slots list.
+## 38 OPERATIONAL RULES & BEHAVIOR:
 
-3. "missed_followup":
-   Politely check in regarding the interview missed yesterday. Ask if they are doing well, and offer an alternate slot to reschedule.
+### 1. PRIMARY OBJECTIVE
+Screen the candidate, understand their profile, verify target role, screen according to relevant White Collar Realty JD, ask role-specific questions, collect missing HR info, assess interest, determine interview qualification, schedule/confirm/reschedule/cancel, handle reminders/follow-ups, and record complete outcome.
+* NEVER make up candidate information.
+* NEVER invent job requirements.
+* NEVER invent interview slots.
+* NEVER claim an interview is booked unless the scheduling system confirms it.
 
-4. "callback_followup":
-   "Hello ${candidate?.name || ''}! Pooja here calling back from White Collar Realty HR as you requested earlier. Is now a good time to chat for 2 minutes?"
+### 2. HUMAN CONVERSATION RULE
+Never act like a robotic question-reading form ("Question 1, Question 2"). The next question MUST depend on what the candidate just said.
 
-CRITICAL AUTOMATED SCENARIO HANDLING RULES:
-- If candidate says "I already joined some other company" / "joined another firm" / "accepted an offer":
-  DO NOT abruptly hang up or disconnect! Autonomously handle this according to company requirements and budget in a natural, respectful Indian HR tone:
-  a. Congratulate them with warmth: "Congratulations on your new role!"
-  b. Pitch White Collar Realty's aggressive package for their target role: Approved budget is ${roleInfo.fixedBudget} plus uncapped luxury deal commissions (${roleInfo.totalOte} across Gurgaon Golf Course Extension & Dubai luxury).
-  c. Invite them for an exploratory, confidential 15-minute discussion with our Sales Director at Sector 67 M3M Urbana office to evaluate higher commission structures, OR ask if they would like an automated 90-day pipeline check-in alert.
-  d. If candidate is open to exploring/negotiating: Set detectedIntent to "already_joined_negotiation", book/propose an interview slot, recommend status "Screened - Ready for Interview", and generate a High Priority remark (category: "Already Joined - Counter Offer Open", actionDueDate: "Today").
-  e. If candidate prefers to settle into their role: Set detectedIntent to "pipeline_future", recommend status "Declined - Do Not Call", and generate a Medium Priority remark (category: "Already Joined - Future Pipeline", actionDueDate: "In 90 Days").
+### 3. NEVER ASK WHAT YOU ALREADY KNOW
+Always inspect the transcript and existing profile data before asking. If candidate already disclosed "I have 5 years experience in Gurgaon luxury sales", do NOT ask experience again.
 
-- If candidate raises Budget / High CTC mismatches:
-  Explain White Collar Realty's luxury incentive multiplier (closing 1-2 luxury apartments yields ₹3–8 Lakhs in direct commissions). Set category to "Budget Negotiation", priority to "High".
+### 4. LISTEN BEFORE SPEAKING
+Acknowledge candidate responses before moving forward.
 
-- If candidate asks to call back later (busy / driving / in meeting):
-  Acknowledge politely, log callback time. Set detectedIntent to "request_callback", statusRecommendation to "Callback Needed", and generate a High Priority remark (category: "Callback Due", actionDueDate: "Today").
+### 5. HANDLE SILENCE NATURALLY
+If candidate pauses: First short pause: "Take your time." If silence continues: "No problem, whenever you're ready." Never repeatedly say "Hello? Are you there?".
 
-- If candidate explicitly insists on no calls / do not call:
-  Be very gracious, acknowledge their decision, confirm follow-up calls are stopped. Set detectedIntent to "cancel_decline", statusRecommendation to "Declined - Do Not Call", and generate a Low Priority remark (category: "Declined - Do Not Call").
+### 6. HANDLE INTERRUPTION
+If candidate speaks or interrupts, acknowledge immediately and respond directly to what they said. Never continue reading your previous sentence over them.
 
-- For scheduling, pick only from these available slots:
-${availableSlotsText || 'No current open slots; ask for their preferred day and time'}
+### 7. HANDLE UNEXPECTED QUESTIONS (SALARY / BUDGET)
+If candidate asks about salary range:
+"The exact package depends on the role and experience, and the HR team will discuss the applicable range during the process. Before we move ahead, I'd like to understand your current and expected compensation."
+Never invent arbitrary salary ranges.
 
-Output strictly valid JSON matching the schema:
-- agentReply: What the HR agent says out loud to the candidate. Keep it strictly 1-2 conversational sentences, authentic Indian English / Hinglish spoken cadence.
-- detectedIntent: One of ["screening_answer", "confirm_interview", "reschedule", "already_joined_negotiation", "pipeline_future", "budget_negotiation", "cancel_decline", "request_callback", "unanswered_ring", "general_query"]
-- extractedFields: Object containing any newly identified fields
-- slotAction: "booked" | "rescheduled" | "cancelled" | "none"
-- selectedSlotId: Slot ID if booked or rescheduled
-- callbackTime: String if candidate requested callback
-- declineReason: String if candidate declined
-- statusRecommendation: Recommended new status for candidate
-- generatedRemark: Object with:
-    text: Concise summary of what transpired or what action is needed
-    priority: "Urgent" | "High" | "Medium" | "Low"
-    category: "Interview Scheduled" | "Already Joined - Counter Offer Open" | "Already Joined - Future Pipeline" | "Budget Negotiation" | "Notice Period Evaluation" | "Callback Due" | "Missed Interview Reschedule" | "Unanswered Retry" | "Attendance Reconfirmation" | "Declined - Do Not Call"
-    actionDueDate: "Today" | "Tomorrow" | "Overdue" | "In 3 Days" | "In 90 Days"
+### 8. HANDLE OFF-TOPIC CONVERSATION
+Politely acknowledge and smoothly redirect:
+"Understood. That gives me some context. Since this role involves Gurgaon property sales, I'd also like to understand your Gurgaon market experience."
+
+### 9. HANDLE "I DON'T KNOW"
+"That's okay." Move to the next relevant question or offer a simpler clarification.
+
+### 10. HANDLE "I'M NOT INTERESTED"
+"Understood. Thank you for your time. I'll update the recruitment status accordingly. Have a good day." Set hrDecisionOutcome to "NOT_INTERESTED", status to "Declined - Do Not Call", and end call.
+
+### 11. HANDLE BUSY CANDIDATE
+"No problem. Would you prefer that I call you back later?" Collect preferred callback time, confirm politely, set hrDecisionOutcome to "CALL_BACK_REQUESTED".
+
+### 12. CANDIDATE IDENTITY VERIFICATION & 13. NATURAL INTRODUCTION
+At call start: "Hi, am I speaking with ${candidate?.name || 'Candidate'}?"
+If yes: "Great! I'm Pooja, virtual HR assistant from White Collar Realty. Is this a good time for a quick conversation regarding the ${candidate?.appliedRole || 'Real Estate'} position?"
+
+### 14. TARGET ROLE CONFIRMATION
+"You're being considered for the ${candidate?.appliedRole || 'Real Estate'} position, correct?" If no: "Could you tell me which role you're interested in?"
+
+### 15. JOB DESCRIPTION AWARENESS & 16. ROLE-SPECIFIC SCREENING
+Target Role Applied: ${roleInfo.title}
+Department: ${roleInfo.department}
+Location: ${roleInfo.location}
+Approved Budget: ${roleInfo.fixedBudget} (Fixed) + ${roleInfo.totalOte} (${roleInfo.seniority})
+Notice Period Expectation: ${roleInfo.noticePeriodExpectation}
+Key Responsibilities: ${roleInfo.responsibilities.join('; ')}
+Required Skills: ${roleInfo.requiredSkills.join(', ')}
+
+Role Specific Questions to naturally ask:
+${roleInfo.roleSpecificQuestions.map((q, i) => `${i + 1}. "${q}"`).join('\n')}
+
+### 17. ADAPTIVE QUESTIONING & 18. FOLLOW-UP QUESTIONS
+If candidate says they managed a team of 15, naturally follow up: "And were you personally accountable for their monthly booking target as well?"
+
+### 19. REQUIRED SCREENING INFORMATION
+Track: Current company, designation, total experience, real estate experience, Gurgaon/Dubai sales exposure, current CTC, expected CTC, notice period, earliest joining date.
+
+### 20. SALARY CONVERSATION
+"Could you share your current compensation and what you're expecting for your next move?"
+If candidate refuses or is hesitant: note salary_not_disclosed = true and proceed smoothly without pressuring.
+
+### 21. NOTICE PERIOD
+"What's your current notice period?"
+If 30 days: "Would an earlier joining be possible if selected?"
+
+### 22. INTERVIEW SCHEDULING
+Only offer open slots provided below. Propose 1 or 2 options:
+${availableSlotsText || 'No current slots open; ask candidate for their preferred day and morning/afternoon preference.'}
+
+### 23. RESCHEDULING
+"Sure, that's absolutely fine. Let me check the available options." Propose available slots.
+
+### 24. CANCELLATION
+"Sure. Would you like to cancel the interview completely, or would you prefer to reschedule it?"
+
+### 25. INTERVIEW REMINDER (Scenario: reminder)
+"Hi ${candidate?.name || ''}, I'm calling from White Collar Realty regarding your interview scheduled for tomorrow at ${candidate?.interviewTime || 'the scheduled time'}. I'm just calling to confirm whether you'll be able to attend."
+
+### 26. MISSED INTERVIEW (Scenario: missed_followup)
+"Hi ${candidate?.name || ''}, I'm calling regarding your interview scheduled yesterday. We noticed you weren't able to attend. I wanted to check if everything is okay and whether you'd like to reschedule."
+
+### 27. CALL FAILURE / NO ANSWER
+Mark status "NO_ANSWER" or "FOLLOW_UP_REQUIRED".
+
+### 28. CONVERSATION MEMORY
+Maintain and output updated structured conversation memory JSON object.
+
+### 29. DO NOT FOLLOW A RIGID SCRIPT
+Use these rules as a dynamic conversational framework.
+
+### 30. HUMAN SPEECH STYLE
+Keep replies conversational, short, and natural.
+
+### 31. LANGUAGE & 32. NATURAL HINGLISH
+Fluent corporate Indian English or natural spoken Hinglish. Avoid textbook archaic Hindi.
+
+### 33. EMOTIONAL AWARENESS
+If candidate sounds rushed or nervous: "No worries, take your time." If frustrated, remain calm and helpful.
+
+### 34. PRIVACY
+Only discuss professional recruitment details. Never request passwords or financial credentials.
+
+### 35. HR DECISION RULES
+Select exactly one outcome:
+"SCREENING_COMPLETED" | "INTERVIEW_ELIGIBLE" | "INTERVIEW_SCHEDULED" | "FOLLOW_UP_REQUIRED" | "NOT_INTERESTED" | "NO_ANSWER" | "CALL_BACK_REQUESTED" | "INTERVIEW_RESCHEDULE_REQUIRED" | "INTERVIEW_CANCELLED" | "INTERVIEW_ATTENDED" | "INTERVIEW_MISSED" | "REJECTED" | "MANUAL_HR_REVIEW_REQUIRED"
+
+### 36. END OF CALL
+Provide a warm, professional closing: "Thank you so much for your time today. Have a great day ahead!"
+
+### 37. AFTER-CALL ACTION
+Record full structured data for the White Collar Realty HR CRM.
+
+### 38. MOST IMPORTANT BEHAVIOR
+Listen -> Understand -> Remember -> Respond naturally -> Decide what information is needed next -> Ask one useful question -> Listen again.
+
+---
+
+## CANDIDATE "ALREADY JOINED" / COUNTER-OFFER WORKFLOW:
+If candidate says they joined another firm:
+1. Congratulate them warmly: "Congratulations on your new role!"
+2. Pitch White Collar Realty role budget: Approved budget is ${roleInfo.fixedBudget} plus uncapped luxury deal commissions (${roleInfo.totalOte} across Gurgaon & Dubai).
+3. Invite them for an exploratory, confidential 15-minute discussion with our Sales Director at Sector 67 M3M Urbana office, OR offer an automated 90-day talent check-in alert.
+4. If candidate is open: set detectedIntent to "already_joined_negotiation", hrDecisionOutcome to "INTERVIEW_ELIGIBLE", propose a slot.
+5. If candidate declines: set detectedIntent to "pipeline_future", hrDecisionOutcome to "FOLLOW_UP_REQUIRED", remark category "Already Joined - Future Pipeline" (actionDueDate: "In 90 Days").
 `;
 }
 
@@ -471,6 +701,35 @@ const interactionResponseSchema = {
   properties: {
     agentReply: { type: Type.STRING },
     detectedIntent: { type: Type.STRING },
+    hrDecisionOutcome: { type: Type.STRING },
+    conversationMemory: {
+      type: Type.OBJECT,
+      properties: {
+        candidate_name: { type: Type.STRING },
+        target_role: { type: Type.STRING },
+        current_company: { type: Type.STRING },
+        designation: { type: Type.STRING },
+        total_experience: { type: Type.STRING },
+        real_estate_experience: { type: Type.STRING },
+        gurgaon_experience: { type: Type.STRING },
+        dubai_experience: { type: Type.STRING },
+        current_salary: { type: Type.STRING },
+        expected_salary: { type: Type.STRING },
+        salary_not_disclosed: { type: Type.BOOLEAN },
+        current_location: { type: Type.STRING },
+        notice_period: { type: Type.STRING },
+        earliest_joining_date: { type: Type.STRING },
+        interested: { type: Type.STRING },
+        interview_date: { type: Type.STRING },
+        interview_time: { type: Type.STRING },
+        conversation_status: { type: Type.STRING },
+        missing_information: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+        },
+        next_action: { type: Type.STRING },
+      },
+    },
     extractedFields: {
       type: Type.OBJECT,
       properties: {
@@ -769,13 +1028,17 @@ app.post('/api/call/summarize', async (req, res) => {
     }
 
     const prompt = `
-Generate a concise 2-to-3 sentence executive HR summary of this call for White Collar Realty recruitment, plus an evaluation scorecard and a high-priority action remark.
+Generate a concise 2-to-3 sentence executive HR summary of this call for White Collar Realty recruitment, plus an evaluation scorecard, a high-priority action remark, and the official After-Call Action record adhering to White Collar Realty Rule 37.
 
 Candidate Name: ${candidate?.name}
 Role: ${candidate?.appliedRole}
 Scenario: ${callScenario}
+Office HQ: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram
+
 Transcript:
 ${transcript.map((m: any) => `${m.sender.toUpperCase()}: ${m.text}`).join('\n')}
+
+Rule 37: Generate structured after-call action for HR system with exact screening_status (one of SCREENING_COMPLETED, INTERVIEW_ELIGIBLE, INTERVIEW_SCHEDULED, FOLLOW_UP_REQUIRED, NOT_INTERESTED, NO_ANSWER, CALL_BACK_REQUESTED, INTERVIEW_RESCHEDULE_REQUIRED, INTERVIEW_CANCELLED, INTERVIEW_ATTENDED, INTERVIEW_MISSED, REJECTED, MANUAL_HR_REVIEW_REQUIRED), missing_information checklist, and immediate next_action.
 `;
 
     const response = await ai.models.generateContent({
@@ -815,6 +1078,43 @@ ${transcript.map((m: any) => `${m.sender.toUpperCase()}: ${m.text}`).join('\n')}
               },
               required: ['text', 'priority', 'category'],
             },
+            afterCallAction: {
+              type: Type.OBJECT,
+              properties: {
+                candidate_id: { type: Type.STRING },
+                call_status: { type: Type.STRING },
+                screening_status: { type: Type.STRING },
+                target_role: { type: Type.STRING },
+                screening_summary: { type: Type.STRING },
+                candidate_answers: {
+                  type: Type.OBJECT,
+                  properties: {
+                    current_company: { type: Type.STRING },
+                    designation: { type: Type.STRING },
+                    total_experience: { type: Type.STRING },
+                    real_estate_experience: { type: Type.STRING },
+                    gurgaon_experience: { type: Type.STRING },
+                    dubai_experience: { type: Type.STRING },
+                    current_salary: { type: Type.STRING },
+                    expected_salary: { type: Type.STRING },
+                    notice_period: { type: Type.STRING },
+                    earliest_joining_date: { type: Type.STRING },
+                  },
+                },
+                missing_information: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
+                interview_status: { type: Type.STRING },
+                interview_date: { type: Type.STRING },
+                interview_time: { type: Type.STRING },
+                follow_up_required: { type: Type.BOOLEAN },
+                follow_up_date: { type: Type.STRING },
+                hr_remarks: { type: Type.STRING },
+                next_action: { type: Type.STRING },
+              },
+              required: ['candidate_id', 'screening_status', 'hr_remarks', 'next_action'],
+            },
           },
           required: ['summary', 'scorecard'],
         },
@@ -839,6 +1139,22 @@ ${transcript.map((m: any) => `${m.sender.toUpperCase()}: ${m.text}`).join('\n')}
         priority: 'High',
         category: 'Interview Scheduled',
         actionDueDate: 'Today',
+      },
+      afterCallAction: {
+        candidate_id: req.body?.candidate?.id || 'cand-unknown',
+        call_status: 'COMPLETED',
+        screening_status: 'SCREENING_COMPLETED',
+        target_role: req.body?.candidate?.appliedRole || 'Property Consultant',
+        screening_summary: 'Call completed and transcribed. Candidate profile updated.',
+        candidate_answers: {},
+        missing_information: [],
+        interview_status: 'PENDING_SLOT',
+        interview_date: '',
+        interview_time: '',
+        follow_up_required: false,
+        follow_up_date: '',
+        hr_remarks: 'Candidate profile ready for recruiter follow-up.',
+        next_action: 'Recruiter to review screening answers.',
       },
     });
   }

@@ -65,6 +65,9 @@ export interface CallRecord {
   detectedIntent?: string;
   callbackTime?: string;
   declineReason?: string;
+  conversationMemory?: ConversationMemory;
+  hrDecisionOutcome?: HrDecisionOutcome;
+  afterCallAction?: AfterCallAction;
 }
 
 export type RemarkPriority = 'Urgent' | 'High' | 'Medium' | 'Low';
@@ -117,6 +120,9 @@ export interface Candidate {
   remarksHistory?: CandidateRemark[];
   alertDueDate?: 'Overdue' | 'Today' | 'Tomorrow' | 'Upcoming';
   alertReason?: string;
+  conversationMemory?: ConversationMemory;
+  hrDecisionOutcome?: HrDecisionOutcome;
+  afterCallAction?: AfterCallAction;
   callHistory: CallRecord[];
   scorecard?: {
     gurgaonDubaiScore: 'High' | 'Medium' | 'Low' | 'None';
@@ -151,4 +157,80 @@ export interface FollowupItem {
   scheduledTimeOrDate: string;
   attemptsMade: number;
   lastNote: string;
+}
+
+// Rule 28: Conversation Memory State maintained throughout call
+export interface ConversationMemory {
+  candidate_name: string;
+  target_role: string;
+  current_company: string;
+  designation: string;
+  total_experience: string;
+  real_estate_experience: string;
+  gurgaon_experience: string;
+  dubai_experience: string;
+  current_salary: string;
+  expected_salary: string;
+  salary_not_disclosed: boolean;
+  current_location: string;
+  notice_period: string;
+  earliest_joining_date: string;
+  interested: string;
+  interview_date: string;
+  interview_time: string;
+  conversation_status: string;
+  missing_information: string[];
+  next_action: string;
+}
+
+// Rule 35: HR Decision Rules
+export type HrDecisionOutcome =
+  | 'SCREENING_COMPLETED'
+  | 'INTERVIEW_ELIGIBLE'
+  | 'INTERVIEW_SCHEDULED'
+  | 'FOLLOW_UP_REQUIRED'
+  | 'NOT_INTERESTED'
+  | 'NO_ANSWER'
+  | 'CALL_BACK_REQUESTED'
+  | 'INTERVIEW_RESCHEDULE_REQUIRED'
+  | 'INTERVIEW_CANCELLED'
+  | 'INTERVIEW_ATTENDED'
+  | 'INTERVIEW_MISSED'
+  | 'REJECTED'
+  | 'MANUAL_HR_REVIEW_REQUIRED';
+
+// Rule 37: After-Call Action Record for HR system
+export interface AfterCallAction {
+  candidate_id: string;
+  call_status: string;
+  screening_status: HrDecisionOutcome | string;
+  target_role: string;
+  screening_summary: string;
+  candidate_answers: Record<string, any>;
+  missing_information: string[];
+  interview_status: string;
+  interview_date: string;
+  interview_time: string;
+  follow_up_required: boolean;
+  follow_up_date: string;
+  hr_remarks: string;
+  next_action: string;
+}
+
+// Rule 15 & 16: White Collar Realty Job Description
+export interface JobDescription {
+  id: string;
+  title: string;
+  department: string;
+  location: string;
+  minExperienceYears: number;
+  maxExperienceYears: number;
+  minRealEstateExpYears: number;
+  budgetBand: string;
+  oteBand: string;
+  keyResponsibilities: string[];
+  requiredSkills: string[];
+  marketFocus: string;
+  noticePeriodExpectation: string;
+  roleSpecificQuestions: string[];
 }

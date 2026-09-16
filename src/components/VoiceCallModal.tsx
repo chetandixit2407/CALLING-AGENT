@@ -6,8 +6,10 @@ import {
 } from 'lucide-react';
 import { 
   Candidate, ChatMessage, CallScenario, ScreeningData, InterviewSlot,
-  CandidateRemark, RemarkPriority, RemarkCategory 
+  CandidateRemark, RemarkPriority, RemarkCategory,
+  ConversationMemory, HrDecisionOutcome, AfterCallAction
 } from '../types';
+import { WHITE_COLLAR_JOB_DESCRIPTIONS } from '../data/jobDescriptions';
 import { voiceAudio } from '../utils/audioSpeech';
 
 interface VoiceCallModalProps {
@@ -63,6 +65,34 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     category: candidate.latestRemark.category,
     actionDueDate: candidate.latestRemark.actionDueDate,
   } : null);
+
+  const [conversationMemory, setConversationMemory] = useState<Partial<ConversationMemory>>(
+    candidate.conversationMemory || {
+      candidate_name: candidate.name,
+      target_role: candidate.appliedRole,
+      current_company: candidate.screening?.currentCompany || '',
+      designation: candidate.screening?.currentDesignation || '',
+      total_experience: candidate.screening?.totalExperienceYears ? `${candidate.screening.totalExperienceYears} years` : '',
+      real_estate_experience: candidate.screening?.realEstateExperienceYears ? `${candidate.screening.realEstateExperienceYears} years` : '',
+      gurgaon_experience: candidate.screening?.gurgaonDubaiExperience?.gurgaon ? 'Yes' : 'Unconfirmed',
+      dubai_experience: candidate.screening?.gurgaonDubaiExperience?.dubai ? 'Yes' : 'No',
+      current_salary: candidate.screening?.currentSalaryLPA || '',
+      expected_salary: candidate.screening?.expectedSalaryLPA || '',
+      salary_not_disclosed: false,
+      current_location: candidate.screening?.currentLocation || '',
+      notice_period: candidate.screening?.noticePeriodDays !== undefined ? `${candidate.screening.noticePeriodDays} days` : '',
+      earliest_joining_date: candidate.screening?.earliestJoiningDate || '',
+      interested: 'Yes',
+      interview_date: candidate.interviewDate || '',
+      interview_time: candidate.interviewTime || '',
+      conversation_status: 'IN_PROGRESS',
+      missing_information: [],
+      next_action: 'Conduct initial screening',
+    }
+  );
+
+  const [hrDecisionOutcome, setHrDecisionOutcome] = useState<HrDecisionOutcome | undefined>(candidate.hrDecisionOutcome);
+  const [afterCallAction, setAfterCallAction] = useState<AfterCallAction | null>(candidate.afterCallAction || null);
 
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -502,6 +532,10 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
             }
 
             if (payload.detectedIntent) setDetectedIntent(payload.detectedIntent);
+            if (payload.hrDecisionOutcome) setHrDecisionOutcome(payload.hrDecisionOutcome);
+            if (payload.conversationMemory) {
+              setConversationMemory((prev) => ({ ...prev, ...payload.conversationMemory }));
+            }
             if (payload.selectedSlotId) setBookedSlotId(payload.selectedSlotId);
             if (payload.callbackTime) setCallbackTime(payload.callbackTime);
             if (payload.declineReason) setDeclineReason(payload.declineReason);
@@ -551,6 +585,10 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         }
 
         if (data.detectedIntent) setDetectedIntent(data.detectedIntent);
+        if (data.hrDecisionOutcome) setHrDecisionOutcome(data.hrDecisionOutcome);
+        if (data.conversationMemory) {
+          setConversationMemory((prev) => ({ ...prev, ...data.conversationMemory }));
+        }
         if (data.selectedSlotId) setBookedSlotId(data.selectedSlotId);
         if (data.callbackTime) setCallbackTime(data.callbackTime);
         if (data.declineReason) setDeclineReason(data.declineReason);
@@ -610,6 +648,9 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       if (sumData.scorecard) scorecard = sumData.scorecard;
       if (sumData.latestRemark) {
         setLatestGeneratedRemark((prev) => prev || sumData.latestRemark);
+      }
+      if (sumData.afterCallAction) {
+        setAfterCallAction(sumData.afterCallAction);
       }
     } catch (e) {
       console.warn('Summarize fallback:', e);
@@ -725,6 +766,9 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       declineReason: declineReason || candidate.declineReason,
       notes: summary,
       scorecard: scorecard || candidate.scorecard,
+      conversationMemory: conversationMemory as ConversationMemory,
+      hrDecisionOutcome: hrDecisionOutcome,
+      afterCallAction: afterCallAction || undefined,
       latestRemark: newRemark,
       remarksHistory: [newRemark, ...(candidate.remarksHistory || [])],
       alertDueDate: alertDueDate,
@@ -744,6 +788,9 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
           detectedIntent,
           callbackTime,
           declineReason,
+          conversationMemory: conversationMemory as ConversationMemory,
+          hrDecisionOutcome: hrDecisionOutcome,
+          afterCallAction: afterCallAction || undefined,
         },
         ...candidate.callHistory,
       ],
@@ -1230,46 +1277,96 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               </div>
 
               {/* Real-Time Priority Remark Live Card */}
-              <div className="mt-3 p-3 rounded-xl bg-slate-900/90 border border-slate-700/70 shadow-xs">
-                <div className="flex items-center justify-between gap-1 mb-1.5">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Auto CRM Remark & Priority</span>
+              {(() => {
+                const roleKey = (candidate.appliedRole || '').toLowerCase().includes('manager')
+                  ? 'sales_manager'
+                  : (candidate.appliedRole || '').toLowerCase().includes('business') || (candidate.appliedRole || '').toLowerCase().includes('bdm')
+                  ? 'bdm'
+                  : 'property_consultant';
+                const currentJd = WHITE_COLLAR_JOB_DESCRIPTIONS[roleKey];
+
+                return (
+                  <div className="mt-3 p-3 rounded-xl bg-slate-900/90 border border-slate-700/70 shadow-xs space-y-2.5">
+                    {/* Role & Budget Band Header */}
+                    <div className="pb-2 border-b border-slate-800 flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-[10px] uppercase font-bold text-amber-400/90 tracking-wider">Target Role & Budget (Rule 15)</div>
+                        <div className="text-xs font-bold text-white leading-tight mt-0.5">{currentJd?.title || candidate.appliedRole}</div>
+                        <div className="text-[11px] text-emerald-400 font-semibold mt-0.5">
+                          Fixed: {currentJd?.budgetBand || '₹8–15 LPA'} • <span className="text-slate-400 font-normal">{currentJd?.oteBand || 'Incentives'}</span>
+                        </div>
+                      </div>
+                      {hrDecisionOutcome ? (
+                        <span className={`shrink-0 px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-full border ${
+                          hrDecisionOutcome === 'INTERVIEW_SCHEDULED' || hrDecisionOutcome === 'INTERVIEW_ELIGIBLE'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : hrDecisionOutcome === 'CALL_BACK_REQUESTED' || hrDecisionOutcome === 'FOLLOW_UP_REQUIRED'
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                            : hrDecisionOutcome === 'NOT_INTERESTED' || hrDecisionOutcome === 'REJECTED'
+                            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                            : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                        }`}>
+                          {hrDecisionOutcome.replace(/_/g, ' ')}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 px-2 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-800 rounded-full border border-slate-700">
+                          Screening
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Missing Information Alert if any */}
+                    {conversationMemory.missing_information && conversationMemory.missing_information.length > 0 && (
+                      <div className="p-2 rounded-lg bg-amber-950/30 border border-amber-500/30 text-[11px]">
+                        <span className="font-semibold text-amber-300">Pending screening points: </span>
+                        <span className="text-amber-200">{conversationMemory.missing_information.join(', ')}</span>
+                      </div>
+                    )}
+
+                    {/* Auto CRM Remark & Priority */}
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Auto CRM Remark & Priority</span>
+                        </div>
+                        {latestGeneratedRemark?.priority ? (
+                          <span className={`px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide rounded-full border ${
+                            latestGeneratedRemark.priority === 'Urgent'
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                              : latestGeneratedRemark.priority === 'High'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                              : latestGeneratedRemark.priority === 'Medium'
+                              ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                              : 'bg-slate-700/40 text-slate-300 border-slate-600'
+                          }`}>
+                            {latestGeneratedRemark.priority} Priority
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-500">Auto-evaluating</span>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] text-amber-300 font-medium truncate mb-1">
+                        {latestGeneratedRemark?.category || 'Analyzing conversation intent...'}
+                      </div>
+
+                      <p className="text-xs text-slate-300 line-clamp-3 bg-slate-950/70 p-2 rounded-lg border border-slate-800 leading-snug">
+                        {latestGeneratedRemark?.text || 'AI is actively evaluating candidate responses to assign action priority and CRM remarks.'}
+                      </p>
+
+                      {latestGeneratedRemark?.actionDueDate && (
+                        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+                          <span>Action Due:</span>
+                          <span className="font-semibold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                            {latestGeneratedRemark.actionDueDate}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {latestGeneratedRemark?.priority ? (
-                    <span className={`px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide rounded-full border ${
-                      latestGeneratedRemark.priority === 'Urgent'
-                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                        : latestGeneratedRemark.priority === 'High'
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                        : latestGeneratedRemark.priority === 'Medium'
-                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                        : 'bg-slate-700/40 text-slate-300 border-slate-600'
-                    }`}>
-                      {latestGeneratedRemark.priority} Priority
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-500">Auto-evaluating</span>
-                  )}
-                </div>
-
-                <div className="text-[11px] text-amber-300 font-medium truncate mb-1">
-                  {latestGeneratedRemark?.category || 'Analyzing conversation intent...'}
-                </div>
-
-                <p className="text-xs text-slate-300 line-clamp-3 bg-slate-950/70 p-2 rounded-lg border border-slate-800 leading-snug">
-                  {latestGeneratedRemark?.text || 'AI is actively evaluating candidate responses to assign action priority and CRM remarks.'}
-                </p>
-
-                {latestGeneratedRemark?.actionDueDate && (
-                  <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
-                    <span>Action Due:</span>
-                    <span className="font-semibold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                      {latestGeneratedRemark.actionDueDate}
-                    </span>
-                  </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* 7 Data Points Real-time Checklist */}
               <div className="mt-3 space-y-2.5 text-xs">
