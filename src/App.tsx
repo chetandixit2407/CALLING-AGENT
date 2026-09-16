@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, Calendar, Clock, PhoneCall, Search, Filter, 
   Sparkles, CheckCircle2, AlertTriangle, ArrowUpRight, 
@@ -12,11 +12,13 @@ import { Header } from './components/Header';
 import { MetricsBar } from './components/MetricsBar';
 import { CandidateDrawer } from './components/CandidateDrawer';
 import { VoiceCallModal } from './components/VoiceCallModal';
+import { VapiCallModal } from './components/VapiCallModal';
 import { InterviewScheduleTab } from './components/InterviewScheduleTab';
 import { FollowupQueueTab } from './components/FollowupQueueTab';
 import { NewCandidateModal } from './components/NewCandidateModal';
 import { ConfirmationEmailModal } from './components/ConfirmationEmailModal';
 import { WhatsAppReminderModal } from './components/WhatsAppReminderModal';
+import { vapiService, VapiCallStatus, DEFAULT_VAPI_ASSISTANT_ID } from './utils/vapiService';
 
 export default function App() {
   const [candidates, setCandidates] = useState<Candidate[]>(INITIAL_CANDIDATES);
@@ -39,6 +41,19 @@ export default function App() {
     candidate: Candidate;
     template?: 'unanswered' | 'interview_reminder' | 'missed_followup';
   } | null>(null);
+
+  // Vapi Voice Assistant state
+  const [vapiCallStatus, setVapiCallStatus] = useState<VapiCallStatus>('idle');
+  const [vapiCandidate, setVapiCandidate] = useState<Candidate | null>(null);
+  const [showVapiModal, setShowVapiModal] = useState<boolean>(false);
+
+  // Listen to Vapi state events
+  useEffect(() => {
+    const unsub = vapiService.onStatusChange((status) => {
+      setVapiCallStatus(status);
+    });
+    return () => unsub();
+  }, []);
 
   const handleEmailSent = (candidateId: string) => {
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -215,6 +230,27 @@ export default function App() {
     return true;
   });
 
+  // Launch live Vapi voice assistant call
+  const handleStartVapiCall = (candidate?: Candidate) => {
+    if (vapiCallStatus === 'active' || vapiCallStatus === 'connecting') {
+      setShowVapiModal(true);
+      return;
+    }
+
+    const targetCandidate =
+      candidate ||
+      selectedCandidate ||
+      candidates.find((c) => c.status === 'Screening Pending') ||
+      candidates[0];
+
+    setVapiCandidate(targetCandidate);
+    setShowVapiModal(true);
+  };
+
+  const handleEndVapiCall = () => {
+    vapiService.stopCall();
+  };
+
   // Launch a call simulation
   const handleStartCall = (candidate: Candidate, scenario: string = 'screening') => {
     setActiveCallCandidate(candidate);
@@ -339,11 +375,9 @@ export default function App() {
       {/* Top Header */}
       <Header
         onNewCandidate={() => setShowNewCandidateModal(true)}
-        onQuickStartCall={() => {
-          // Find first pending or candidate to screen
-          const cand = candidates.find((c) => c.status === 'Screening Pending') || candidates[0];
-          handleStartCall(cand, 'screening');
-        }}
+        onQuickStartCall={() => handleStartVapiCall()}
+        onEndCall={handleEndVapiCall}
+        vapiCallStatus={vapiCallStatus}
         activeCandidateCount={candidates.length}
       />
 
@@ -897,6 +931,24 @@ export default function App() {
         )}
       </main>
 
+      {/* MODAL: LIVE VAPI VOICE ASSISTANT MODAL */}
+      {showVapiModal && (
+        <VapiCallModal
+          isOpen={showVapiModal}
+          candidate={vapiCandidate}
+          assistantId={DEFAULT_VAPI_ASSISTANT_ID}
+          onClose={() => setShowVapiModal(false)}
+          onCallEnded={(updatedCandidate) => {
+            setCandidates((prev) =>
+              prev.map((c) => (c.id === updatedCandidate.id ? updatedCandidate : c))
+            );
+            if (selectedCandidate?.id === updatedCandidate.id) {
+              setSelectedCandidate(updatedCandidate);
+            }
+          }}
+        />
+      )}
+
       {/* MODAL 1: LIVE VOICE CALL MODAL */}
       {activeCallCandidate && (
         <VoiceCallModal
@@ -916,6 +968,7 @@ export default function App() {
           candidate={selectedCandidate}
           onClose={() => setSelectedCandidate(null)}
           onStartCall={(cand, scenario) => handleStartCall(cand, scenario || 'screening')}
+          onStartVapiCall={(cand) => handleStartVapiCall(cand)}
           onOpenConfirmationMail={(cand) => setConfirmationMailCandidate(cand)}
           onOpenWhatsApp={(cand, template) => setWhatsAppCandidate({ candidate: cand, template })}
         />

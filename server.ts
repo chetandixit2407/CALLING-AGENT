@@ -41,6 +41,36 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Helper to validate and clean Vapi public key (UUID or key format, not shell commands)
+function cleanVapiPublicKey(rawKey?: string): string {
+  if (!rawKey || typeof rawKey !== 'string') return '';
+  const trimmed = rawKey.trim();
+  // Filter out accidental shell command values like 'npm install ...'
+  if (trimmed.startsWith('npm ') || trimmed.includes('install') || trimmed.length < 10) {
+    return '';
+  }
+  return trimmed;
+}
+
+// Vapi public configuration endpoint (safe: only returns public key and assistant ID)
+app.get('/api/vapi-config', (req, res) => {
+  const publicKey =
+    cleanVapiPublicKey(process.env.VAPI_PUBLIC_KEY) ||
+    cleanVapiPublicKey(process.env.VITE_VAPI_PUBLIC_KEY) ||
+    cleanVapiPublicKey(process.env.VAPI_PUBLIC_API_KEY) ||
+    '';
+  const assistantId =
+    process.env.VITE_VAPI_ASSISTANT_ID ||
+    process.env.VAPI_ASSISTANT_ID ||
+    'ed825f7a-e951-444b-81a7-1d6917e439c5';
+
+  res.json({
+    publicKey,
+    assistantId,
+    configured: Boolean(publicKey),
+  });
+});
+
 // White Collar Realty Job Descriptions & Specifications
 interface RoleJDInfo {
   title: string;

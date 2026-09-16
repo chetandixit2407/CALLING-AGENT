@@ -11,6 +11,7 @@ interface CandidateDrawerProps {
   candidate: Candidate | null;
   onClose: () => void;
   onStartCall: (candidate: Candidate, scenario?: string) => void;
+  onStartVapiCall?: (candidate: Candidate) => void;
   onOpenConfirmationMail?: (candidate: Candidate) => void;
   onOpenWhatsApp?: (candidate: Candidate, template?: 'unanswered' | 'interview_reminder' | 'missed_followup') => void;
 }
@@ -19,6 +20,7 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
   candidate,
   onClose,
   onStartCall,
+  onStartVapiCall,
   onOpenConfirmationMail,
   onOpenWhatsApp,
 }) => {
@@ -101,12 +103,23 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
 
           {/* Quick Call Action Bar */}
           <div className="mt-5 flex items-center gap-2.5 flex-wrap">
+            {onStartVapiCall && (
+              <button
+                id="btn-drawer-vapi-call"
+                onClick={() => onStartVapiCall(candidate)}
+                className="flex-1 min-w-[150px] flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-slate-950 px-4 py-2 rounded-lg text-xs font-bold transition shadow-md shadow-amber-500/20 active:scale-95"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                <span>Vapi Voice Screening</span>
+              </button>
+            )}
+
             <button
               onClick={() => onStartCall(candidate, 'screening')}
-              className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-4 py-2 rounded-lg text-xs font-bold transition shadow-md"
+              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold transition"
             >
               <Phone className="w-3.5 h-3.5" />
-              <span>Screening Call</span>
+              <span>Simulate Call</span>
             </button>
 
             {candidate.interviewSlotId && (

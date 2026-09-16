@@ -211,6 +211,8 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
       recognition.onstart = () => {
         setIsListening(true);
+        // Play subtle listening feedback chime (Google Assistant / Alexa style)
+        voiceAudio.playListeningStartChime();
       };
 
       recognition.onresult = (event: any) => {
@@ -1176,7 +1178,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               ))}
             </div>
 
-            {/* Live Conversation Mode Toggle (Hands-free phone call) */}
+            {/* Live Conversation Mode Toggle (Hands-free phone call like Google Assistant / Alexa) */}
             <button
               type="button"
               onClick={() => {
@@ -1195,10 +1197,10 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                   : 'bg-slate-800 text-slate-400 border border-slate-700'
               }`}
-              title="Real-time conversational mode: mic automatically opens when Pooja finishes speaking"
+              title="Hands-free natural two-way conversation (Google Assistant & Alexa style): mic opens automatically when Pooja finishes speaking"
             >
               <Mic className={`w-3.5 h-3.5 ${liveHandsFree ? 'text-emerald-400' : ''}`} />
-              <span>Real-Time Talk: {liveHandsFree ? 'ON' : 'Manual'}</span>
+              <span>Full Duplex Mic: {liveHandsFree ? 'Auto-Listen (Alexa/Google)' : 'Manual'}</span>
             </button>
 
             <button

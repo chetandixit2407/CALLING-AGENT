@@ -1,16 +1,21 @@
 import React from 'react';
-import { PhoneCall, Building2, Globe, ShieldCheck, Sparkles, Plus } from 'lucide-react';
+import { PhoneCall, PhoneOff, Building2, Globe, Plus, RefreshCw } from 'lucide-react';
 import { Candidate } from '../types';
+import { VapiCallStatus } from '../utils/vapiService';
 
 interface HeaderProps {
   onNewCandidate: () => void;
   onQuickStartCall: () => void;
+  onEndCall?: () => void;
+  vapiCallStatus?: VapiCallStatus;
   activeCandidateCount: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onNewCandidate,
   onQuickStartCall,
+  onEndCall,
+  vapiCallStatus = 'idle',
   activeCandidateCount,
 }) => {
   return (
@@ -36,7 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-slate-600">•</span>
                 <span className="inline-flex items-center gap-1 text-emerald-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Agent Pooja Online
+                  Agent Pooja (Vapi Voice) Online
                 </span>
               </p>
             </div>
@@ -58,14 +63,51 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Add Candidate</span>
             </button>
 
-            <button
-              id="btn-quick-call-start"
-              onClick={onQuickStartCall}
-              className="inline-flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-4 py-2 rounded-lg shadow-md shadow-amber-500/20 transition active:scale-95"
-            >
-              <PhoneCall className="w-3.5 h-3.5" />
-              <span>Start Voice Screening</span>
-            </button>
+            {/* Vapi Call State Button Group */}
+            {vapiCallStatus === 'connecting' && (
+              <button
+                id="btn-quick-call-start"
+                disabled
+                className="inline-flex items-center gap-2 text-xs font-semibold bg-amber-500/80 text-slate-950 px-4 py-2 rounded-lg shadow-md transition cursor-wait animate-pulse"
+              >
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Connecting...</span>
+              </button>
+            )}
+
+            {vapiCallStatus === 'active' && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onQuickStartCall}
+                  className="inline-flex items-center gap-2 text-xs font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 px-3.5 py-2 rounded-lg shadow-xs shadow-emerald-950/40 animate-pulse transition"
+                  title="View active call"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                  <span>Call Active</span>
+                </button>
+                <button
+                  id="btn-quick-call-end"
+                  onClick={onEndCall}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-2 rounded-lg shadow-md shadow-rose-900/30 transition active:scale-95 cursor-pointer"
+                  title="End Active Vapi Voice Call"
+                >
+                  <PhoneOff className="w-3.5 h-3.5" />
+                  <span>End Call</span>
+                </button>
+              </div>
+            )}
+
+            {(vapiCallStatus === 'idle' || vapiCallStatus === 'ended' || vapiCallStatus === 'error') && (
+              <button
+                id="btn-quick-call-start"
+                onClick={onQuickStartCall}
+                className="inline-flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-4 py-2 rounded-lg shadow-md shadow-amber-500/20 transition active:scale-95"
+              >
+                <PhoneCall className="w-3.5 h-3.5" />
+                <span>Start Voice Screening</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

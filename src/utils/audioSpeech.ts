@@ -40,29 +40,50 @@ export class VoiceAudioManager {
       sampleText.toLowerCase().includes('namaste') ||
       sampleText.toLowerCase().includes('shukriya');
 
-    // 1. If Hindi mode requested
+    // 1. If Hindi mode or Hindi text detected, pick top natural Hindi engine
     if (isHindi) {
       const hindiVoice =
+        this.voices.find((v) => (v.lang === 'hi-IN' || v.lang === 'hi_IN') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Neural'))) ||
         this.voices.find((v) => v.lang === 'hi-IN' || v.lang === 'hi_IN') ||
         this.voices.find((v) => v.lang.startsWith('hi')) ||
         this.voices.find((v) => v.name.toLowerCase().includes('hindi'));
       if (hindiVoice) return hindiVoice;
     }
 
-    // 2. High-priority search for Indian English Female Voices (Pooja - White Collar HR)
-    // Common Indian female voices: Heera, Neerja, Veena, Kavya, Priya, Google English (India)
+    // 2. High-priority search for Google Assistant / Alexa Natural Indian English Female Voices
+    // E.g. "Google English (India)", Microsoft Heera Online (Natural), Microsoft Neerja Online (Natural), Veena, Raveena
+    const naturalIndianFemale = this.voices.find((v) => {
+      const name = v.name.toLowerCase();
+      const lang = v.lang.toLowerCase();
+      const isIndian = lang.includes('en-in') || lang.includes('en_in') || name.includes('india');
+      const isNaturalOrNeural = name.includes('natural') || name.includes('neural') || name.includes('online') || name.includes('google');
+      const isFemale = name.includes('female') || name.includes('heera') || name.includes('neerja') || 
+                       name.includes('veena') || name.includes('kavya') || name.includes('priya') ||
+                       name.includes('raveena') || name.includes('geeta');
+      return isIndian && (isNaturalOrNeural || isFemale);
+    });
+    if (naturalIndianFemale) return naturalIndianFemale;
+
+    // 3. Indian English Female Voices (Pooja - White Collar HR)
     const indianFemale = this.voices.find((v) => {
       const name = v.name.toLowerCase();
       const lang = v.lang.toLowerCase();
       const isIndian = lang.includes('en-in') || lang.includes('en_in') || name.includes('india');
       const isFemale = name.includes('female') || name.includes('heera') || name.includes('neerja') || 
-                       name.includes('veena') || name.includes('kavya') || name.includes('priya') ||
-                       name.includes('natural');
+                       name.includes('veena') || name.includes('kavya') || name.includes('priya');
       return isIndian && isFemale;
     });
     if (indianFemale) return indianFemale;
 
-    // 3. Any Indian English Voice (en-IN, en_IN, India)
+    // 4. Any Google / Microsoft Natural English Voice (Alexa / Assistant tier)
+    const googleAssistantVoice = this.voices.find((v) => {
+      const name = v.name.toLowerCase();
+      return (name.includes('google') && v.lang.startsWith('en')) || 
+             (name.includes('natural') && (name.includes('jenny') || name.includes('aria') || name.includes('sonia')));
+    });
+    if (googleAssistantVoice) return googleAssistantVoice;
+
+    // 5. Any Indian English Voice (en-IN, en_IN, India)
     const indianAny = this.voices.find((v) => {
       const name = v.name.toLowerCase();
       const lang = v.lang.toLowerCase();
@@ -70,18 +91,10 @@ export class VoiceAudioManager {
     });
     if (indianAny) return indianAny;
 
-    // 4. Hindi-English bilingual voice (e.g. Google हिन्दी which speaks English with strong Indian accent)
-    const hindiAccent = this.voices.find((v) => {
-      const name = v.name.toLowerCase();
-      const lang = v.lang.toLowerCase();
-      return lang.startsWith('hi') || name.includes('hindi');
-    });
-    if (hindiAccent) return hindiAccent;
-
-    // 5. Natural sounding female English voice as polite fallback
+    // 6. Natural sounding female English voice (Siri/Alexa/Google Assistant grade fallback)
     const naturalFemale = this.voices.find((v) => {
       const name = v.name.toLowerCase();
-      return (name.includes('natural') || name.includes('female') || name.includes('samantha') || name.includes('zira')) && v.lang.startsWith('en');
+      return (name.includes('natural') || name.includes('neural') || name.includes('samantha') || name.includes('zira') || name.includes('karen')) && v.lang.startsWith('en');
     });
     if (naturalFemale) return naturalFemale;
 
@@ -173,6 +186,28 @@ export class VoiceAudioManager {
     } catch {}
   }
 
+  // Play subtle Google Assistant / Alexa style listening earcon
+  playListeningStartChime() {
+    try {
+      const ctx = this.getAudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.08); // A5
+
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.19);
+    } catch {}
+  }
+
   // Play call disconnect beep
   playDisconnectTone() {
     try {
@@ -227,9 +262,9 @@ export class VoiceAudioManager {
     }
 
     const utterance = new SpeechSynthesisUtterance(cleanedText);
-    // Indian corporate HR natural cadence: energetic, clear, brisk
-    utterance.rate = options.rate ?? 1.0;
-    utterance.pitch = options.pitch ?? 1.06;
+    // Google Assistant / Alexa natural cadence: crisp, friendly, conversational, warm
+    utterance.rate = options.rate ?? 1.02;
+    utterance.pitch = options.pitch ?? 1.02;
 
     const selectedVoice = this.findBestIndianVoice(options.language, cleanedText);
 
@@ -288,8 +323,8 @@ export class VoiceAudioManager {
     }
 
     const utterance = new SpeechSynthesisUtterance(cleanedText);
-    utterance.rate = options.rate ?? 1.0;
-    utterance.pitch = options.pitch ?? 1.06;
+    utterance.rate = options.rate ?? 1.02;
+    utterance.pitch = options.pitch ?? 1.02;
 
     const selectedVoice = this.findBestIndianVoice(options.language, cleanedText);
 
