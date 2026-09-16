@@ -93,10 +93,12 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
   const [hrDecisionOutcome, setHrDecisionOutcome] = useState<HrDecisionOutcome | undefined>(candidate.hrDecisionOutcome);
   const [afterCallAction, setAfterCallAction] = useState<AfterCallAction | null>(candidate.afterCallAction || null);
+  const [rightPanelTab, setRightPanelTab] = useState<'checklist' | 'memory' | 'action'>('checklist');
 
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<any>(null);
+  const candidateSilenceTimerRef = useRef<any>(null);
   const liveHandsFreeRef = useRef<boolean>(true);
   const latencyModeRef = useRef<'ultra' | 'fast' | 'normal'>('ultra');
   const callStatusRef = useRef<'ringing' | 'connected' | 'ended'>('ringing');
@@ -221,6 +223,14 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
           }
         }
         if (transcriptResult) {
+          // Rule 6: STOP speaking immediately if candidate interrupts or speaks
+          if (isAgentSpeakingRef.current || voiceAudio.isSpeaking()) {
+            voiceAudio.stopSpeaking();
+            setIsAgentSpeaking(false);
+            isAgentSpeakingRef.current = false;
+          }
+          if (candidateSilenceTimerRef.current) clearTimeout(candidateSilenceTimerRef.current);
+
           setInputMessage(transcriptResult);
 
           // Sub-second real-time turn taking:
@@ -274,13 +284,25 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     const role = candidate.appliedRole;
 
     if (scenario === 'screening') {
-      greeting = `Hello ${name}! I am Pooja, Virtual HR Assistant calling from White Collar Realty regarding your application for the ${role} role. Is this a good time to speak with you for a quick 2-minute screening?`;
+      // Rule 12: ALWAYS confirm the candidate's identity first: 'Hi, am I speaking with [Candidate Name]?'
+      greeting = languageMode === 'Hindi'
+        ? `Namaste, kya meri baat ${name} ji se ho rahi hai?`
+        : `Hi, am I speaking with ${name}?`;
     } else if (scenario === 'reminder') {
-      greeting = `Hello ${name}! I am Pooja from White Collar Realty HR. I am calling to reconfirm your face-to-face interview scheduled for ${candidate.interviewDate || 'tomorrow'} at ${candidate.interviewTime || '11:00 AM'} at our Sector 67 Gurugram office (M3M Urbana Business Park). Will you be attending?`;
+      // Rule 25: Interview reconfirmation greeting
+      greeting = languageMode === 'Hindi'
+        ? `Namaste ${name} ji, main White Collar Realty se Pooja bol rahi hoon. Kal ${candidate.interviewTime || '11:00 AM'} ko hamare Sector 67 Gurugram office mein aapka interview scheduled hai. Kya aap confirm kar sakte hain ki aap attend kar rahe hain?`
+        : `Hi ${name}, I'm calling from White Collar Realty regarding your interview scheduled for tomorrow at ${candidate.interviewTime || '11:00 AM'}. I'm just calling to confirm whether you'll be able to attend.`;
     } else if (scenario === 'missed_followup') {
-      greeting = `Hello ${name}! This is Pooja from White Collar Realty HR. We noticed that you were unable to make it to your scheduled interview yesterday. I hope everything is well. Would you like us to reschedule your interview?`;
+      // Rule 26: Missed interview follow-up greeting
+      greeting = languageMode === 'Hindi'
+        ? `Namaste ${name} ji, main White Collar Realty HR se Pooja bol rahi hoon. Kal aapka interview scheduled tha par aap nahi aa paaye. Main check karna chahti thi ki sab theek hai aur kya aap reschedule karwana chahte hain?`
+        : `Hi ${name}, I'm calling regarding your interview scheduled yesterday. We noticed you weren't able to attend. I wanted to check if everything is okay and whether you'd like to reschedule.`;
     } else if (scenario === 'callback_followup') {
-      greeting = `Hello ${name}! Pooja here from White Collar Realty HR. I am calling back as requested earlier. Is now a good time to go over your real estate experience and schedule your face-to-face round?`;
+      // Rule 11/13: Scheduled callback greeting
+      greeting = languageMode === 'Hindi'
+        ? `Namaste ${name} ji! Pooja bol rahi hoon White Collar Realty se. Aapne call karne ko kaha tha. Kya abhi 2 minute baat karne ka sahi samay hai?`
+        : `Hi ${name}, I'm Pooja calling back from White Collar Realty as requested earlier. Is this a good time to speak for about two minutes?`;
     }
 
     const initialMsg: ChatMessage = {
@@ -335,10 +357,32 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     startListening();
   };
 
+  // Rule 6: Candidate interrupt action
+  const handleInterruptAgent = () => {
+    voiceAudio.stopSpeaking();
+    setIsAgentSpeaking(false);
+    isAgentSpeakingRef.current = false;
+    if (candidateSilenceTimerRef.current) clearTimeout(candidateSilenceTimerRef.current);
+    startListening();
+  };
+
+  // Rule 5: Candidate silence simulation
+  const handleSimulateSilence = () => {
+    handleSendMessage('[Candidate is silent / pausing]');
+  };
+
   // Send candidate utterance to AI backend via real-time streaming endpoint
   const handleSendMessage = async (textToSend?: string) => {
     const message = (textToSend !== undefined ? textToSend : inputMessage).trim();
     if (!message || isProcessing) return;
+
+    // Rule 6: Stop agent speech immediately if candidate speaks or sends input
+    if (isAgentSpeakingRef.current || voiceAudio.isSpeaking()) {
+      voiceAudio.stopSpeaking();
+      setIsAgentSpeaking(false);
+      isAgentSpeakingRef.current = false;
+    }
+    if (candidateSilenceTimerRef.current) clearTimeout(candidateSilenceTimerRef.current);
 
     setInputMessage('');
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -872,36 +916,45 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     const turns = transcript.filter((m) => m.sender === 'candidate').length;
     if (turns === 0) {
       return [
-        { label: 'English: Good Time', text: 'Yes, good afternoon! I can speak for a few minutes.' },
-        { label: 'Hindi: Haanji, boliye', text: 'Haanji bilkul, main baat kar sakta hu.' },
-        { label: 'Already Joined Other Firm', text: 'Actually I have already joined some other company last week.' },
-        { label: 'Driving / Busy (Callback)', text: 'I am currently driving on Golf Course Road. Please call me back today at 5:30 PM.' },
-        { label: 'Not Interested (Decline)', text: 'Actually I am not looking to switch right now. Please stop follow-ups.' },
+        { label: 'Yes, speaking (Rule 12)', text: 'Yes, speaking.' },
+        { label: 'Hindi: Haanji, main bol raha hu', text: 'Haanji, main bol raha hoon.' },
+        { label: 'Wrong number (Rule 12)', text: 'No, this is wrong number. Nobody by that name here.' },
       ];
     } else if (turns === 1) {
       return [
-        { label: 'Square Yards, 5 Yrs (Gurgaon+Dubai)', text: 'I am working with Square Yards as Assistant Manager. Total 5 years experience, pure real estate 4 years with Gurgaon and Dubai luxury sales.' },
-        { label: 'Already Joined, What is Your Budget?', text: 'I recently joined another firm, but what is the budget and role at White Collar Realty? I can explore if it is better.' },
-        { label: 'DLF Consultant, Gurgaon Exp', text: 'Currently at DLF Homes as Senior Consultant. 6 years experience selling luxury high-rises on Golf Course Extension Road.' },
-        { label: 'Call After 3 Months', text: 'I want to settle in my new company first. Please stay in touch and call me back after 3 months.' },
+        { label: 'Yes, have 2 mins (Rule 13)', text: 'Yes, I can speak for two minutes.' },
+        { label: 'Hindi: Haanji, boliye', text: 'Haanji bilkul, kahiye.' },
+        { label: 'Salary Range First? (Rule 7)', text: 'Before proceeding, could you share the salary range for this role?' },
+        { label: 'Driving / Callback (Rule 11)', text: 'I am driving right now on Golf Course Road. Please call me back today at 5:30 PM.' },
+        { label: 'Already Joined Other Firm (Rule 30)', text: 'Actually I have already joined another real estate company last week.' },
+        { label: 'Not Interested (Rule 10)', text: 'I am not looking to switch right now. Please close my application.' },
       ];
     } else if (turns === 2) {
       return [
-        { label: 'CTC: 12 LPA Present, 16 LPA Expected', text: 'My current fixed package is 12 LPA plus quarterly incentives, and I am expecting around 16 LPA.' },
-        { label: 'CTC: 8 LPA Present, 11 LPA Expected', text: 'Current is 8 LPA fixed, expecting 10 to 12 LPA based on role and incentives.' },
-        { label: 'Dubai Specialist (AED/INR)', text: 'Present is 15 LPA equivalent. Expecting 20 LPA for Gurgaon & Dubai dual desk.' },
+        { label: 'Confirm Role (Rule 14)', text: `Yes, I applied for the ${candidate.appliedRole} position.` },
+        { label: 'Square Yards, 4 Yrs Gurgaon (Rule 16-18)', text: 'I am working with Square Yards as Senior Consultant. Total 4 years experience in Gurgaon luxury residential sales.' },
+        { label: 'DLF Consultant, Dubai + Gurgaon', text: 'Currently with DLF Homes as Consultant. 5 years real estate experience with both Gurgaon and Dubai sales.' },
+        { label: 'Off-Topic: Financial Sales (Rule 8)', text: 'I worked in insurance and mutual fund sales in Delhi before moving here.' },
+        { label: 'Uncertain: Don\'t Know Volume (Rule 9)', text: 'I do not know my exact quarterly sales volume off the top of my head.' },
       ];
     } else if (turns === 3) {
       return [
-        { label: 'Gurgaon Resident, 15 Days Notice', text: 'I stay in Sector 54 Gurgaon, and my notice period is 15 days.' },
-        { label: 'Immediate Joiner, DLF Phase 2', text: 'I stay in DLF Phase 2, ready to join immediately as I have already served my notice.' },
-        { label: 'Noida, 30 Days Notice', text: 'I stay in Noida Sector 76 but comfortable commuting to Sector 67 Gurugram. Notice period is 30 days.' },
+        { label: 'CTC: 10 LPA Present, 14 Expected (Rule 19)', text: 'My current fixed salary is 10 LPA and I am expecting around 14 LPA.' },
+        { label: 'Prefer Not To Disclose (Rule 20)', text: 'I would prefer not to disclose my current salary right now, but I am expecting around 13 to 14 LPA.' },
+        { label: 'CTC: 8 LPA Present, 11 Expected', text: 'Current is 8 LPA fixed, expecting 10 to 12 LPA based on incentives.' },
+      ];
+    } else if (turns === 4) {
+      return [
+        { label: 'Gurgaon, 15 Days Notice (Rule 21)', text: 'I stay in Sector 54 Gurgaon, and my notice period is 15 days.' },
+        { label: '30 Days / Buyout Negotiable (Rule 21)', text: 'My notice period is 30 days, but I can negotiate an early buyout with my current employer.' },
+        { label: 'Immediate Joiner, DLF Phase 2', text: 'I stay in DLF Phase 2 Gurugram, ready to join immediately as I have served my notice.' },
       ];
     } else {
       return [
-        { label: 'Confirm Tomorrow 02:30 PM', text: 'Tomorrow at 2:30 PM works great for me. Please share office directions.' },
-        { label: 'Confirm Tomorrow 04:30 PM', text: 'Tomorrow at 4:30 PM fits my schedule best.' },
-        { label: 'Confirm Friday 12:00 PM', text: 'Friday at 12:00 PM at your Sector 67 M3M Urbana office suits me perfectly.' },
+        { label: 'Confirm Tomorrow 02:30 PM (Rule 22)', text: 'Tomorrow at 2:30 PM works great for me at your Sector 67 office.' },
+        { label: 'Confirm Tomorrow 04:30 PM (Rule 22)', text: 'Tomorrow at 4:30 PM fits my schedule best.' },
+        { label: 'Reschedule: Friday 12:00 PM (Rule 23)', text: 'Can we reschedule to Friday at 12:00 PM instead?' },
+        { label: 'Cancel Interview (Rule 24)', text: 'I would like to cancel the interview completely.' },
       ];
     }
   };
@@ -995,24 +1048,57 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
             {/* Speaking Waveform / Mic Live Animation */}
             {isAgentSpeaking ? (
-              <div className="flex items-center gap-1.5 bg-amber-500/15 px-2.5 py-1 rounded-md border border-amber-500/30 text-[11px] text-amber-300">
-                <span className="w-1 h-3 bg-amber-400 animate-bounce" />
-                <span className="w-1 h-4 bg-amber-400 animate-bounce delay-75" />
-                <span className="w-1 h-2 bg-amber-400 animate-bounce delay-150" />
-                <span className="w-1 h-3.5 bg-amber-400 animate-bounce delay-100" />
-                <span className="font-semibold">Pooja Speaking (Indian Accent)...</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-amber-500/15 px-2.5 py-1 rounded-md border border-amber-500/30 text-[11px] text-amber-300">
+                  <span className="w-1 h-3 bg-amber-400 animate-bounce" />
+                  <span className="w-1 h-4 bg-amber-400 animate-bounce delay-75" />
+                  <span className="w-1 h-2 bg-amber-400 animate-bounce delay-150" />
+                  <span className="w-1 h-3.5 bg-amber-400 animate-bounce delay-100" />
+                  <span className="font-semibold">Pooja Speaking...</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleInterruptAgent}
+                  className="px-2.5 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 hover:text-rose-200 border border-rose-500/40 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer animate-pulse"
+                  title="Rule 6: Immediately stop Pooja speaking when candidate speaks or interrupts"
+                >
+                  <span>⚡ Interrupt Pooja (Rule 6)</span>
+                </button>
               </div>
             ) : isListening ? (
-              <div className="flex items-center gap-1.5 bg-emerald-500/15 px-2.5 py-1 rounded-md border border-emerald-500/30 text-[11px] text-emerald-300 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-0.5" />
-                <span className="font-semibold">Candidate Mic Live (Speak naturally)...</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-emerald-500/15 px-2.5 py-1 rounded-md border border-emerald-500/30 text-[11px] text-emerald-300 animate-pulse">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-0.5" />
+                  <span className="font-semibold">Candidate Mic Live (Speak naturally)...</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSimulateSilence}
+                  disabled={isProcessing}
+                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 text-[10px] font-semibold border border-slate-700 transition cursor-pointer"
+                  title="Rule 5: Test candidate silence handling ('Take your time.')"
+                >
+                  <span>⏳ Test Silence (Rule 5)</span>
+                </button>
               </div>
             ) : isProcessing ? (
               <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700 text-slate-300 text-[11px]">
                 <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
                 <span>Pooja analyzing response...</span>
               </div>
-            ) : null}
+            ) : (
+              callStatus === 'connected' && (
+                <button
+                  type="button"
+                  onClick={handleSimulateSilence}
+                  disabled={isProcessing}
+                  className="px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-amber-300 text-[10px] font-medium border border-slate-700/80 transition cursor-pointer"
+                  title="Rule 5: Test candidate silence handling ('Take your time.')"
+                >
+                  <span>⏳ Test Silence (Rule 5)</span>
+                </button>
+              )
+            )}
           </div>
 
           {/* Quick Simulation Trigger: Unanswered */}
@@ -1265,252 +1351,493 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
             </div>
           </div>
 
-          {/* Right Column (1 col): Live Extracted Screening Data Tracker */}
+          {/* Right Column (1 col): Live Extracted Screening Data Tracker & Rule Inspector */}
           <div className="p-4 bg-[#0d1527] overflow-y-auto flex flex-col justify-between space-y-4">
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Live Voice Extraction</span>
-                </h4>
-                <span className="text-[10px] text-slate-400">7 Mandated Points</span>
+              {/* Tab Selector: 7 Points, Rule 28 Memory, Rule 37 Action Record */}
+              <div className="flex items-center gap-1 p-1 bg-slate-900/90 rounded-xl border border-slate-800 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelTab('checklist')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                    rightPanelTab === 'checklist'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>7 Points</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightPanelTab('memory')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                    rightPanelTab === 'memory'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Bot className="w-3 h-3" />
+                  <span>Rule 28 Memory</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightPanelTab('action')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                    rightPanelTab === 'action'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <CheckCircle className="w-3 h-3" />
+                  <span>Rule 37 Action</span>
+                </button>
               </div>
 
-              {/* Real-Time Priority Remark Live Card */}
-              {(() => {
-                const roleKey = (candidate.appliedRole || '').toLowerCase().includes('manager')
-                  ? 'sales_manager'
-                  : (candidate.appliedRole || '').toLowerCase().includes('business') || (candidate.appliedRole || '').toLowerCase().includes('bdm')
-                  ? 'bdm'
-                  : 'property_consultant';
-                const currentJd = WHITE_COLLAR_JOB_DESCRIPTIONS[roleKey];
+              {/* TAB 1: 7 Mandated Points & Target Role */}
+              {rightPanelTab === 'checklist' && (
+                <div>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Live Voice Extraction</span>
+                    </h4>
+                    <span className="text-[10px] text-slate-400">7 Mandated Points</span>
+                  </div>
 
-                return (
-                  <div className="mt-3 p-3 rounded-xl bg-slate-900/90 border border-slate-700/70 shadow-xs space-y-2.5">
-                    {/* Role & Budget Band Header */}
-                    <div className="pb-2 border-b border-slate-800 flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-[10px] uppercase font-bold text-amber-400/90 tracking-wider">Target Role & Budget (Rule 15)</div>
-                        <div className="text-xs font-bold text-white leading-tight mt-0.5">{currentJd?.title || candidate.appliedRole}</div>
-                        <div className="text-[11px] text-emerald-400 font-semibold mt-0.5">
-                          Fixed: {currentJd?.budgetBand || '₹8–15 LPA'} • <span className="text-slate-400 font-normal">{currentJd?.oteBand || 'Incentives'}</span>
+                  {/* Real-Time Priority Remark Live Card */}
+                  {(() => {
+                    const roleKey = (candidate.appliedRole || '').toLowerCase().includes('manager')
+                      ? 'sales_manager'
+                      : (candidate.appliedRole || '').toLowerCase().includes('business') || (candidate.appliedRole || '').toLowerCase().includes('bdm')
+                      ? 'bdm'
+                      : 'property_consultant';
+                    const currentJd = WHITE_COLLAR_JOB_DESCRIPTIONS[roleKey];
+
+                    return (
+                      <div className="mt-3 p-3 rounded-xl bg-slate-900/90 border border-slate-700/70 shadow-xs space-y-2.5">
+                        {/* Role & Budget Band Header */}
+                        <div className="pb-2 border-b border-slate-800 flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-[10px] uppercase font-bold text-amber-400/90 tracking-wider">Target Role & Budget (Rule 15)</div>
+                            <div className="text-xs font-bold text-white leading-tight mt-0.5">{currentJd?.title || candidate.appliedRole}</div>
+                            <div className="text-[11px] text-emerald-400 font-semibold mt-0.5">
+                              Fixed: {currentJd?.budgetBand || '₹8–15 LPA'} • <span className="text-slate-400 font-normal">{currentJd?.oteBand || 'Incentives'}</span>
+                            </div>
+                          </div>
+                          {hrDecisionOutcome ? (
+                            <span className={`shrink-0 px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-full border ${
+                              hrDecisionOutcome === 'INTERVIEW_SCHEDULED' || hrDecisionOutcome === 'INTERVIEW_ELIGIBLE'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                : hrDecisionOutcome === 'CALL_BACK_REQUESTED' || hrDecisionOutcome === 'FOLLOW_UP_REQUIRED'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                : hrDecisionOutcome === 'NOT_INTERESTED' || hrDecisionOutcome === 'REJECTED'
+                                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                            }`}>
+                              {hrDecisionOutcome.replace(/_/g, ' ')}
+                            </span>
+                          ) : (
+                            <span className="shrink-0 px-2 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-800 rounded-full border border-slate-700">
+                              Screening
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Missing Information Alert if any */}
+                        {conversationMemory.missing_information && conversationMemory.missing_information.length > 0 && (
+                          <div className="p-2 rounded-lg bg-amber-950/30 border border-amber-500/30 text-[11px]">
+                            <span className="font-semibold text-amber-300">Pending screening points: </span>
+                            <span className="text-amber-200">{conversationMemory.missing_information.join(', ')}</span>
+                          </div>
+                        )}
+
+                        {/* Auto CRM Remark & Priority */}
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Auto CRM Remark & Priority</span>
+                            </div>
+                            {latestGeneratedRemark?.priority ? (
+                              <span className={`px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide rounded-full border ${
+                                latestGeneratedRemark.priority === 'Urgent'
+                                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                  : latestGeneratedRemark.priority === 'High'
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                  : latestGeneratedRemark.priority === 'Medium'
+                                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                                  : 'bg-slate-700/40 text-slate-300 border-slate-600'
+                              }`}>
+                                {latestGeneratedRemark.priority} Priority
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-500">Auto-evaluating</span>
+                            )}
+                          </div>
+
+                          <div className="text-[11px] text-amber-300 font-medium truncate mb-1">
+                            {latestGeneratedRemark?.category || 'Analyzing conversation intent...'}
+                          </div>
+
+                          <p className="text-xs text-slate-300 line-clamp-3 bg-slate-950/70 p-2 rounded-lg border border-slate-800 leading-snug">
+                            {latestGeneratedRemark?.text || 'AI is actively evaluating candidate responses to assign action priority and CRM remarks.'}
+                          </p>
+
+                          {latestGeneratedRemark?.actionDueDate && (
+                            <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+                              <span>Action Due:</span>
+                              <span className="font-semibold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                                {latestGeneratedRemark.actionDueDate}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      {hrDecisionOutcome ? (
-                        <span className={`shrink-0 px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-full border ${
-                          hrDecisionOutcome === 'INTERVIEW_SCHEDULED' || hrDecisionOutcome === 'INTERVIEW_ELIGIBLE'
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                            : hrDecisionOutcome === 'CALL_BACK_REQUESTED' || hrDecisionOutcome === 'FOLLOW_UP_REQUIRED'
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                            : hrDecisionOutcome === 'NOT_INTERESTED' || hrDecisionOutcome === 'REJECTED'
-                            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                            : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                        }`}>
-                          {hrDecisionOutcome.replace(/_/g, ' ')}
-                        </span>
-                      ) : (
-                        <span className="shrink-0 px-2 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-800 rounded-full border border-slate-700">
-                          Screening
-                        </span>
-                      )}
-                    </div>
+                    );
+                  })()}
 
-                    {/* Missing Information Alert if any */}
-                    {conversationMemory.missing_information && conversationMemory.missing_information.length > 0 && (
-                      <div className="p-2 rounded-lg bg-amber-950/30 border border-amber-500/30 text-[11px]">
-                        <span className="font-semibold text-amber-300">Pending screening points: </span>
-                        <span className="text-amber-200">{conversationMemory.missing_information.join(', ')}</span>
-                      </div>
-                    )}
-
-                    {/* Auto CRM Remark & Priority */}
-                    <div>
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
-                          <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Auto CRM Remark & Priority</span>
-                        </div>
-                        {latestGeneratedRemark?.priority ? (
-                          <span className={`px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide rounded-full border ${
-                            latestGeneratedRemark.priority === 'Urgent'
-                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                              : latestGeneratedRemark.priority === 'High'
-                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                              : latestGeneratedRemark.priority === 'Medium'
-                              ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                              : 'bg-slate-700/40 text-slate-300 border-slate-600'
-                          }`}>
-                            {latestGeneratedRemark.priority} Priority
-                          </span>
+                  {/* 7 Data Points Real-time Checklist */}
+                  <div className="mt-3 space-y-2.5 text-xs">
+                    {/* 1. Company & Designation */}
+                    <div className={`p-2.5 rounded-lg border transition ${
+                      extracted.currentCompany || extracted.currentDesignation
+                        ? 'bg-emerald-950/20 border-emerald-500/30'
+                        : 'bg-slate-900/60 border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[11px]">1. Current Company & Role</span>
+                        {extracted.currentCompany ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                         ) : (
-                          <span className="text-[10px] text-slate-500">Auto-evaluating</span>
+                          <span className="text-[10px] text-slate-500">Listening...</span>
                         )}
                       </div>
-
-                      <div className="text-[11px] text-amber-300 font-medium truncate mb-1">
-                        {latestGeneratedRemark?.category || 'Analyzing conversation intent...'}
+                      <div className="font-semibold text-white text-xs mt-0.5">
+                        {extracted.currentCompany || extracted.currentDesignation
+                          ? `${extracted.currentCompany || ''} - ${extracted.currentDesignation || ''}`
+                          : 'Not extracted yet'}
                       </div>
+                    </div>
 
-                      <p className="text-xs text-slate-300 line-clamp-3 bg-slate-950/70 p-2 rounded-lg border border-slate-800 leading-snug">
-                        {latestGeneratedRemark?.text || 'AI is actively evaluating candidate responses to assign action priority and CRM remarks.'}
-                      </p>
+                    {/* 2. Total & Real Estate Exp */}
+                    <div className={`p-2.5 rounded-lg border transition ${
+                      extracted.totalExperienceYears || extracted.realEstateExperienceYears
+                        ? 'bg-emerald-950/20 border-emerald-500/30'
+                        : 'bg-slate-900/60 border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[11px]">2. Total & RE Experience</span>
+                        {extracted.realEstateExperienceYears ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <span className="text-[10px] text-slate-500">Listening...</span>
+                        )}
+                      </div>
+                      <div className="font-semibold text-white text-xs mt-0.5">
+                        {extracted.realEstateExperienceYears
+                          ? `${extracted.realEstateExperienceYears} Yrs Real Estate (${extracted.totalExperienceYears || extracted.realEstateExperienceYears} Yrs Total)`
+                          : 'Not extracted yet'}
+                      </div>
+                    </div>
 
-                      {latestGeneratedRemark?.actionDueDate && (
-                        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
-                          <span>Action Due:</span>
-                          <span className="font-semibold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                            {latestGeneratedRemark.actionDueDate}
-                          </span>
-                        </div>
-                      )}
+                    {/* 3. Gurgaon & Dubai Property Sales */}
+                    <div className={`p-2.5 rounded-lg border transition ${
+                      extracted.gurgaonDubaiExperience?.gurgaon || extracted.gurgaonDubaiExperience?.dubai
+                        ? 'bg-emerald-950/20 border-emerald-500/30'
+                        : 'bg-slate-900/60 border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[11px]">3. Gurgaon / Dubai Exp</span>
+                        {extracted.gurgaonDubaiExperience?.gurgaon || extracted.gurgaonDubaiExperience?.dubai ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <span className="text-[10px] text-slate-500">Listening...</span>
+                        )}
+                      </div>
+                      <div className="font-semibold text-white text-xs mt-0.5">
+                        {extracted.gurgaonDubaiExperience?.details || 
+                          (extracted.gurgaonDubaiExperience?.gurgaon ? 'Gurgaon Luxury Verified' : 'Not recorded yet')}
+                      </div>
+                    </div>
+
+                    {/* 4. Present & Expected CTC */}
+                    <div className={`p-2.5 rounded-lg border transition ${
+                      extracted.currentSalaryLPA || extracted.expectedSalaryLPA || conversationMemory.salary_not_disclosed
+                        ? 'bg-emerald-950/20 border-emerald-500/30'
+                        : 'bg-slate-900/60 border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[11px]">4. Present & Expected CTC</span>
+                        {extracted.expectedSalaryLPA || conversationMemory.salary_not_disclosed ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <span className="text-[10px] text-slate-500">Listening...</span>
+                        )}
+                      </div>
+                      <div className="font-semibold text-emerald-400 text-xs mt-0.5">
+                        {conversationMemory.salary_not_disclosed
+                          ? `Undisclosed (Expected: ${extracted.expectedSalaryLPA || 'Under negotiation'})`
+                          : extracted.expectedSalaryLPA
+                          ? `Expected: ${extracted.expectedSalaryLPA}`
+                          : 'Not extracted yet'}
+                      </div>
+                    </div>
+
+                    {/* 5. Location */}
+                    <div className={`p-2.5 rounded-lg border transition ${
+                      extracted.currentLocation ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-slate-900/60 border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[11px]">5. Current Location</span>
+                        {extracted.currentLocation ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <span className="text-[10px] text-slate-500">Listening...</span>
+                        )}
+                      </div>
+                      <div className="font-semibold text-white text-xs mt-0.5">
+                        {extracted.currentLocation || 'Not extracted yet'}
+                      </div>
+                    </div>
+
+                    {/* 6. Notice Period */}
+                    <div className={`p-2.5 rounded-lg border transition ${
+                      extracted.noticePeriodDays !== undefined ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-slate-900/60 border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[11px]">6. Notice Period / Joining</span>
+                        {extracted.noticePeriodDays !== undefined ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <span className="text-[10px] text-slate-500">Listening...</span>
+                        )}
+                      </div>
+                      <div className="font-semibold text-white text-xs mt-0.5">
+                        {extracted.noticePeriodDays !== undefined
+                          ? `${extracted.noticePeriodDays} Days Notice`
+                          : 'Not extracted yet'}
+                      </div>
+                    </div>
+
+                    {/* 7. F2F Interview Slot & Venue */}
+                    <div className={`p-2.5 rounded-lg border transition ${
+                      bookedSlotId || extracted.preferredInterviewSlot
+                        ? 'bg-amber-950/30 border-amber-500/40'
+                        : 'bg-slate-900/60 border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[11px]">7. F2F Interview Slot</span>
+                        {bookedSlotId ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-amber-400" />
+                        ) : (
+                          <span className="text-[10px] text-slate-500">Negotiating...</span>
+                        )}
+                      </div>
+                      <div className="font-semibold text-amber-400 text-xs mt-0.5">
+                        {bookedSlotId
+                          ? availableSlots.find((s) => s.id === bookedSlotId)?.displayLabel || extracted.preferredInterviewSlot
+                          : extracted.preferredInterviewSlot || 'Slot not finalized'}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        White Collar HQ (TOWER-A, M3M Urbana, Sector 67, Gurugram)
+                      </div>
                     </div>
                   </div>
-                );
-              })()}
+                </div>
+              )}
 
-              {/* 7 Data Points Real-time Checklist */}
-              <div className="mt-3 space-y-2.5 text-xs">
-                {/* 1. Company & Designation */}
-                <div className={`p-2.5 rounded-lg border transition ${
-                  extracted.currentCompany || extracted.currentDesignation
-                    ? 'bg-emerald-950/20 border-emerald-500/30'
-                    : 'bg-slate-900/60 border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">1. Current Company & Role</span>
-                    {extracted.currentCompany ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <span className="text-[10px] text-slate-500">Listening...</span>
+              {/* TAB 2: Rule 28 Live Conversation Memory Inspector */}
+              {rightPanelTab === 'memory' && (
+                <div className="space-y-3 text-xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                        <Bot className="w-3.5 h-3.5" />
+                        <span>Rule 28 Memory State</span>
+                      </h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Live conversational variables tracked to prevent question repetition
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-amber-300 font-mono text-[10px] uppercase">
+                      {conversationMemory.conversation_status || 'ongoing'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">candidate_name</span>
+                        <span className="font-semibold text-white">{conversationMemory.candidate_name || candidate.name}</span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">target_role</span>
+                        <span className="font-semibold text-amber-300">{conversationMemory.target_role || candidate.appliedRole}</span>
+                      </div>
+
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">current_company</span>
+                        <span className="font-semibold text-white">{conversationMemory.current_company || '—'}</span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">designation</span>
+                        <span className="font-semibold text-white">{conversationMemory.designation || '—'}</span>
+                      </div>
+
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">total_experience</span>
+                        <span className="font-semibold text-white">{conversationMemory.total_experience || '—'}</span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">real_estate_exp</span>
+                        <span className="font-semibold text-emerald-400">{conversationMemory.real_estate_experience || '—'}</span>
+                      </div>
+
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">gurgaon_experience</span>
+                        <span className={`font-semibold ${conversationMemory.gurgaon_experience ? 'text-emerald-300' : 'text-slate-400'}`}>
+                          {conversationMemory.gurgaon_experience ? '✓ Yes' : 'No'}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">dubai_experience</span>
+                        <span className={`font-semibold ${conversationMemory.dubai_experience ? 'text-emerald-300' : 'text-slate-400'}`}>
+                          {conversationMemory.dubai_experience ? '✓ Yes' : 'No'}
+                        </span>
+                      </div>
+
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">current_salary</span>
+                        <span className="font-semibold text-white">{conversationMemory.current_salary || '—'}</span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">expected_salary</span>
+                        <span className="font-semibold text-emerald-300">{conversationMemory.expected_salary || '—'}</span>
+                      </div>
+
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">salary_not_disclosed (R20)</span>
+                        <span className={`font-semibold ${conversationMemory.salary_not_disclosed ? 'text-amber-400' : 'text-slate-400'}`}>
+                          {conversationMemory.salary_not_disclosed ? '⚠️ True (Hesitant)' : 'False'}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">current_location</span>
+                        <span className="font-semibold text-white">{conversationMemory.current_location || '—'}</span>
+                      </div>
+
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">notice_period</span>
+                        <span className="font-semibold text-white">{conversationMemory.notice_period || '—'}</span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">earliest_joining</span>
+                        <span className="font-semibold text-white">{conversationMemory.earliest_joining_date || '—'}</span>
+                      </div>
+
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">interested</span>
+                        <span className="font-semibold text-white">
+                          {conversationMemory.interested === true ? '✓ Interested' : conversationMemory.interested === false ? '✗ Declined' : 'Evaluating'}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block">interview_slot</span>
+                        <span className="font-semibold text-amber-300">
+                          {conversationMemory.interview_date ? `${conversationMemory.interview_date} ${conversationMemory.interview_time || ''}` : (bookedSlotId ? 'Booked' : '—')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 mt-2">
+                      <span className="text-slate-400 text-[10px] block">next_action</span>
+                      <span className="font-bold text-amber-400">{conversationMemory.next_action || 'Conduct screening'}</span>
+                    </div>
+
+                    {conversationMemory.missing_information && conversationMemory.missing_information.length > 0 && (
+                      <div className="p-2 rounded bg-amber-950/30 border border-amber-500/30 text-[11px] text-amber-300">
+                        <span className="font-semibold">Missing information array: </span>
+                        {conversationMemory.missing_information.join(', ')}
+                      </div>
                     )}
                   </div>
-                  <div className="font-semibold text-white text-xs mt-0.5">
-                    {extracted.currentCompany || extracted.currentDesignation
-                      ? `${extracted.currentCompany || ''} - ${extracted.currentDesignation || ''}`
-                      : 'Not extracted yet'}
-                  </div>
                 </div>
+              )}
 
-                {/* 2. Total & Real Estate Exp */}
-                <div className={`p-2.5 rounded-lg border transition ${
-                  extracted.totalExperienceYears || extracted.realEstateExperienceYears
-                    ? 'bg-emerald-950/20 border-emerald-500/30'
-                    : 'bg-slate-900/60 border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">2. Total & RE Experience</span>
-                    {extracted.realEstateExperienceYears ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <span className="text-[10px] text-slate-500">Listening...</span>
-                    )}
+              {/* TAB 3: Rule 37 After-Call Action Record Inspector */}
+              {rightPanelTab === 'action' && (
+                <div className="space-y-3 text-xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>Rule 37 Action Record</span>
+                      </h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Mandated structured record created for CRM updates
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-emerald-300 font-bold text-[10px]">
+                      {afterCallAction?.screening_status || hrDecisionOutcome || 'IN_PROGRESS'}
+                    </span>
                   </div>
-                  <div className="font-semibold text-white text-xs mt-0.5">
-                    {extracted.realEstateExperienceYears
-                      ? `${extracted.realEstateExperienceYears} Yrs Real Estate (${extracted.totalExperienceYears || extracted.realEstateExperienceYears} Yrs Total)`
-                      : 'Not extracted yet'}
-                  </div>
-                </div>
 
-                {/* 3. Gurgaon & Dubai Property Sales */}
-                <div className={`p-2.5 rounded-lg border transition ${
-                  extracted.gurgaonDubaiExperience?.gurgaon || extracted.gurgaonDubaiExperience?.dubai
-                    ? 'bg-emerald-950/20 border-emerald-500/30'
-                    : 'bg-slate-900/60 border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">3. Gurgaon / Dubai Exp</span>
-                    {extracted.gurgaonDubaiExperience?.gurgaon || extracted.gurgaonDubaiExperience?.dubai ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <span className="text-[10px] text-slate-500">Listening...</span>
-                    )}
-                  </div>
-                  <div className="font-semibold text-white text-xs mt-0.5">
-                    {extracted.gurgaonDubaiExperience?.details || 
-                      (extracted.gurgaonDubaiExperience?.gurgaon ? 'Gurgaon Luxury Verified' : 'Not recorded yet')}
-                  </div>
-                </div>
+                  <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 space-y-2.5 text-[11px]">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                      <span className="text-slate-400">Target Role:</span>
+                      <span className="font-bold text-white">{afterCallAction?.target_role || candidate.appliedRole}</span>
+                    </div>
 
-                {/* 4. Present & Expected CTC */}
-                <div className={`p-2.5 rounded-lg border transition ${
-                  extracted.currentSalaryLPA || extracted.expectedSalaryLPA
-                    ? 'bg-emerald-950/20 border-emerald-500/30'
-                    : 'bg-slate-900/60 border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">4. Present & Expected CTC</span>
-                    {extracted.expectedSalaryLPA ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <span className="text-[10px] text-slate-500">Listening...</span>
-                    )}
-                  </div>
-                  <div className="font-semibold text-emerald-400 text-xs mt-0.5">
-                    {extracted.expectedSalaryLPA ? `Expected: ${extracted.expectedSalaryLPA}` : 'Not extracted yet'}
-                  </div>
-                </div>
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                      <span className="text-slate-400">Interview Status:</span>
+                      <span className="font-semibold text-amber-300">
+                        {afterCallAction?.interview_status || (bookedSlotId ? 'SCHEDULED' : 'PENDING')}
+                      </span>
+                    </div>
 
-                {/* 5. Location */}
-                <div className={`p-2.5 rounded-lg border transition ${
-                  extracted.currentLocation ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-slate-900/60 border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">5. Current Location</span>
-                    {extracted.currentLocation ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <span className="text-[10px] text-slate-500">Listening...</span>
-                    )}
-                  </div>
-                  <div className="font-semibold text-white text-xs mt-0.5">
-                    {extracted.currentLocation || 'Not extracted yet'}
-                  </div>
-                </div>
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                      <span className="text-slate-400">Date & Time:</span>
+                      <span className="font-semibold text-emerald-400">
+                        {afterCallAction?.interview_date_time || (bookedSlotId ? availableSlots.find(s => s.id === bookedSlotId)?.displayLabel : 'Not scheduled')}
+                      </span>
+                    </div>
 
-                {/* 6. Notice Period */}
-                <div className={`p-2.5 rounded-lg border transition ${
-                  extracted.noticePeriodDays !== undefined ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-slate-900/60 border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">6. Notice Period / Joining</span>
-                    {extracted.noticePeriodDays !== undefined ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <span className="text-[10px] text-slate-500">Listening...</span>
-                    )}
-                  </div>
-                  <div className="font-semibold text-white text-xs mt-0.5">
-                    {extracted.noticePeriodDays !== undefined
-                      ? `${extracted.noticePeriodDays} Days Notice`
-                      : 'Not extracted yet'}
-                  </div>
-                </div>
+                    <div className="pb-2 border-b border-slate-800">
+                      <span className="text-slate-400 block mb-0.5">Interview Location:</span>
+                      <span className="text-white text-[10px] leading-tight block">
+                        {afterCallAction?.interview_location || '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram'}
+                      </span>
+                    </div>
 
-                {/* 7. F2F Interview Slot & Venue */}
-                <div className={`p-2.5 rounded-lg border transition ${
-                  bookedSlotId || extracted.preferredInterviewSlot
-                    ? 'bg-amber-950/30 border-amber-500/40'
-                    : 'bg-slate-900/60 border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">7. F2F Interview Slot</span>
-                    {bookedSlotId ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-amber-400" />
-                    ) : (
-                      <span className="text-[10px] text-slate-500">Negotiating...</span>
-                    )}
-                  </div>
-                  <div className="font-semibold text-amber-400 text-xs mt-0.5">
-                    {bookedSlotId
-                      ? availableSlots.find((s) => s.id === bookedSlotId)?.displayLabel || extracted.preferredInterviewSlot
-                      : extracted.preferredInterviewSlot || 'Slot not finalized'}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-1">
-                    White Collar HQ (TOWER-A, M3M Urbana, Sector 67, Gurugram)
+                    <div className="pb-2 border-b border-slate-800">
+                      <span className="text-slate-400 block mb-0.5">HR Remarks:</span>
+                      <p className="text-slate-200 text-[11px] bg-slate-950/80 p-2 rounded border border-slate-800 leading-relaxed">
+                        {afterCallAction?.hr_remarks || latestGeneratedRemark?.text || 'Screening evaluated according to White Collar Realty 38 operational rules.'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 block mb-0.5">Next Action:</span>
+                      <span className="font-bold text-amber-400 bg-amber-950/30 px-2 py-0.5 rounded border border-amber-500/30 text-[11px]">
+                        {afterCallAction?.next_action || 'Proceed with recruitment workflow'}
+                      </span>
+                    </div>
+
+                    {/* Candidate Answers Dictionary */}
+                    <div className="mt-2 pt-2 border-t border-slate-800">
+                      <span className="text-slate-400 block mb-1 font-semibold text-[10px] uppercase">Candidate Answers:</span>
+                      <div className="space-y-1 bg-slate-950/70 p-2 rounded border border-slate-800/80 text-[10px]">
+                        <div><span className="text-slate-500">Company:</span> <span className="text-white">{afterCallAction?.candidate_answers?.current_company || extracted.currentCompany || '—'}</span></div>
+                        <div><span className="text-slate-500">Experience:</span> <span className="text-white">{afterCallAction?.candidate_answers?.total_experience || extracted.realEstateExperienceYears ? `${extracted.realEstateExperienceYears} yrs RE` : '—'}</span></div>
+                        <div><span className="text-slate-500">CTC:</span> <span className="text-emerald-400">{afterCallAction?.candidate_answers?.expected_salary || extracted.expectedSalaryLPA || '—'}</span></div>
+                        <div><span className="text-slate-500">Location:</span> <span className="text-white">{afterCallAction?.candidate_answers?.location || extracted.currentLocation || '—'}</span></div>
+                        <div><span className="text-slate-500">Notice:</span> <span className="text-white">{afterCallAction?.candidate_answers?.notice_period || (extracted.noticePeriodDays ? `${extracted.noticePeriodDays} days` : '—')}</span></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Bottom Actions: Complete Call */}

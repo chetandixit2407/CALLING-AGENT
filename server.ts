@@ -201,7 +201,7 @@ function enrichFallbackWithMemoryAndOutcome(raw: any, candidate: any, userMessag
   };
 }
 
-// Robust conversational generator with company requirement & budget negotiation handling
+// Robust conversational generator with 38 rules, company requirement & budget negotiation handling
 function computeRawFallbackResponse(
   scenario: string,
   userMessage: string,
@@ -209,16 +209,202 @@ function computeRawFallbackResponse(
   transcript: any[],
   availableSlots: any[]
 ) {
-  const lower = (userMessage || '').toLowerCase();
+  const lower = (userMessage || '').toLowerCase().trim();
   const availableSlotList = availableSlots
     .filter((s: any) => s.isAvailable)
     .map((s: any) => s.displayLabel)
     .join(', ');
 
   const roleInfo = getRoleBudgetInfo(candidate?.appliedRole);
+  const candName = candidate?.name || 'Candidate';
+  const candRole = candidate?.appliedRole || 'Property Consultant';
 
-  // SCENARIO 1: Candidate says they already joined another company / accepted another offer
-  // System handles this according to company requirements and budget for the target role
+  // SCENARIO 0: Silence handling (Rule 5)
+  if (lower.includes('[silence]') || lower.includes('silence') || lower === '...') {
+    const silenceCount = transcript.filter((m: any) => (m.text || '').toLowerCase().includes('time') || (m.text || '').toLowerCase().includes('ready')).length;
+    if (silenceCount === 0) {
+      return {
+        agentReply: 'Take your time.',
+        detectedIntent: 'silence_handled',
+        extractedFields: {},
+        statusRecommendation: 'Screening Pending',
+        generatedRemark: {
+          text: `Candidate paused during conversation. Pooja waited patiently without rushing.`,
+          priority: 'Medium',
+          category: 'Notice Period Evaluation',
+          actionDueDate: 'Today',
+        },
+      };
+    } else {
+      return {
+        agentReply: "No problem, whenever you're ready.",
+        detectedIntent: 'silence_handled',
+        extractedFields: {},
+        statusRecommendation: 'Screening Pending',
+        generatedRemark: {
+          text: `Candidate required additional time. Conversational rhythm maintained naturally.`,
+          priority: 'Medium',
+          category: 'Notice Period Evaluation',
+          actionDueDate: 'Today',
+        },
+      };
+    }
+  }
+
+  // SCENARIO 1: Strict Explicit Decline detection (Rule 10)
+  if (
+    lower.includes('not interested') ||
+    lower.includes('nahi chahiye') ||
+    lower.includes('decline') ||
+    lower.includes('stop calling') ||
+    lower.includes('do not call') ||
+    lower.includes('remove my name') ||
+    lower.includes('no longer exploring')
+  ) {
+    return {
+      agentReply:
+        "Understood. Thank you for your time. I'll update the recruitment status accordingly. Have a good day.",
+      detectedIntent: 'cancel_decline',
+      hrDecisionOutcome: 'NOT_INTERESTED',
+      extractedFields: {},
+      declineReason: userMessage,
+      statusRecommendation: 'Declined - Do Not Call',
+      generatedRemark: {
+        text: `Candidate explicitly declined further interaction. Marked as NOT_INTERESTED per company compliance policy.`,
+        priority: 'Low',
+        category: 'Declined - Do Not Call',
+        actionDueDate: undefined,
+      },
+    };
+  }
+
+  // SCENARIO 2: Callback request detection (Rule 11)
+  if (
+    lower.includes('call back') ||
+    lower.includes('busy') ||
+    lower.includes('driving') ||
+    lower.includes('meeting') ||
+    lower.includes('baad me') ||
+    lower.includes('sham ko') ||
+    lower.includes('call later') ||
+    lower.includes('call me at')
+  ) {
+    return {
+      agentReply:
+        'No problem. Would you prefer that I call you back later? I have noted down a callback alert for today.',
+      detectedIntent: 'request_callback',
+      hrDecisionOutcome: 'CALL_BACK_REQUESTED',
+      extractedFields: {},
+      callbackTime: 'Later Today (Requested by Candidate)',
+      statusRecommendation: 'Callback Needed',
+      generatedRemark: {
+        text: `Candidate currently busy / driving. Requested callback. Follow-up priority queued.`,
+        priority: 'High',
+        category: 'Callback Due',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
+  // SCENARIO 3: Candidate asks about salary range or budget upfront (Rule 7)
+  if (
+    lower.includes('salary range') ||
+    lower.includes('what is the package') ||
+    lower.includes('what is the budget') ||
+    lower.includes('budget kitna') ||
+    lower.includes('kitna package') ||
+    lower.includes('package range') ||
+    (lower.includes('salary') && (lower.includes('range') || lower.includes('bracket') || lower.includes('band') || lower.includes('give')))
+  ) {
+    return {
+      agentReply:
+        "The exact package depends on the role and experience, and the HR team will discuss the applicable range during the process. Before we move ahead, I'd like to understand your current and expected compensation.",
+      detectedIntent: 'salary_inquiry',
+      extractedFields: {},
+      statusRecommendation: 'Screening Pending',
+      generatedRemark: {
+        text: `Candidate asked for salary range upfront. Answered per Rule 7 without inventing ranges; redirected to current/expected CTC.`,
+        priority: 'Medium',
+        category: 'Budget Negotiation',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
+  // SCENARIO 4: Candidate hesitates or refuses to disclose salary (Rule 20)
+  if (
+    lower.includes('prefer not to disclose') ||
+    lower.includes('cannot disclose') ||
+    lower.includes('not comfortable') ||
+    lower.includes('will discuss later') ||
+    lower.includes('not disclose') ||
+    lower.includes('nda')
+  ) {
+    return {
+      agentReply:
+        'No problem at all, we can discuss compensation at a later stage. What is your current notice period or earliest joining date?',
+      detectedIntent: 'screening_answer',
+      extractedFields: {},
+      conversationMemory: {
+        salary_not_disclosed: true,
+      },
+      statusRecommendation: 'Screening Pending',
+      generatedRemark: {
+        text: `Candidate chose not to disclose current compensation (salary_not_disclosed = true). Smoothly proceeded to notice period.`,
+        priority: 'Medium',
+        category: 'Notice Period Evaluation',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
+  // SCENARIO 5: Off-topic conversation (Rule 8)
+  if (
+    lower.includes('mumbai') ||
+    lower.includes('bangalore') ||
+    lower.includes('weather') ||
+    lower.includes('shifted from') ||
+    lower.includes('traffic')
+  ) {
+    return {
+      agentReply:
+        "Understood. That gives me some context. Since this role involves Gurgaon property sales, I'd also like to understand your Gurgaon market experience.",
+      detectedIntent: 'off_topic_redirect',
+      extractedFields: {},
+      statusRecommendation: 'Screening Pending',
+      generatedRemark: {
+        text: `Candidate went off-topic. Smoothly redirected conversation to Gurgaon real estate experience per Rule 8.`,
+        priority: 'Medium',
+        category: 'Notice Period Evaluation',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
+  // SCENARIO 6: "I don't know" / Uncertain answer (Rule 9)
+  if (
+    lower.includes("don't know") ||
+    lower.includes('dont know') ||
+    lower.includes('not sure') ||
+    lower.includes('pata nahi') ||
+    lower === 'no idea'
+  ) {
+    return {
+      agentReply:
+        "That's okay. Could you tell me approximately what you have in mind, or your current notice period?",
+      detectedIntent: 'clarification',
+      extractedFields: {},
+      statusRecommendation: 'Screening Pending',
+      generatedRemark: {
+        text: `Candidate expressed uncertainty. Reassured candidate and simplified the inquiry per Rule 9.`,
+        priority: 'Medium',
+        category: 'Notice Period Evaluation',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
+  // SCENARIO 7: Candidate already joined another firm (Workflow)
   if (
     lower.includes('already join') ||
     lower.includes('already accepted') ||
@@ -231,11 +417,11 @@ function computeRawFallbackResponse(
     lower.includes('accepted offer') ||
     lower.includes('new company')
   ) {
-    // If they already expressed openness or mentioned their package, proceed to counter-offer negotiation
-    if (lower.includes('open') || lower.includes('explore') || lower.includes('lpa') || lower.includes('kitna') || lower.includes('what is the package')) {
+    if (lower.includes('open') || lower.includes('explore') || lower.includes('lpa') || lower.includes('kitna')) {
       return {
-        agentReply: `That is great! For our ${candidate?.appliedRole || 'luxury sales'} desk, White Collar Realty offers a budget of ${roleInfo.fixedBudget}, plus uncapped quarterly incentives where top closers make ${roleInfo.totalOte} across Gurgaon luxury and Dubai properties. We can arrange a confidential, direct discussion with our Sales Director at our Sector 67 HQ. Would ${availableSlotList ? availableSlotList.split(',')[0] : 'Tomorrow at 2:30 PM'} work for a quick conversation?`,
+        agentReply: `That is great! For our ${candRole} desk, White Collar Realty offers a budget of ${roleInfo.fixedBudget}, plus uncapped quarterly incentives where top closers make ${roleInfo.totalOte} across Gurgaon luxury and Dubai properties. We can arrange a confidential, direct discussion with our Sales Director at our Sector 67 HQ. Would ${availableSlotList ? availableSlotList.split(',')[0] : 'Tomorrow at 2:30 PM'} work for a quick conversation?`,
         detectedIntent: 'reschedule',
+        hrDecisionOutcome: 'INTERVIEW_ELIGIBLE',
         extractedFields: {
           currentCompany: lower.includes('square') ? 'Square Yards' : lower.includes('anarock') ? 'Anarock' : 'Recently Joined Other Firm',
         },
@@ -250,14 +436,15 @@ function computeRawFallbackResponse(
     }
 
     return {
-      agentReply: `Congratulations on your new role! At White Collar Realty, we are rapidly scaling our luxury Gurugram and Dubai portfolios, and our approved budget for ${candidate?.appliedRole || 'this position'} is ${roleInfo.fixedBudget} plus industry-leading uncapped deal commissions. Even though you recently joined, would you be open to an exploratory 15-minute confidential discussion with our Director at our Sector 67 M3M Urbana office, or would you prefer we stay in touch for a 3-month check-in?`,
+      agentReply: `Congratulations on your new role! At White Collar Realty, our approved budget for ${candRole} is ${roleInfo.fixedBudget} plus industry-leading uncapped deal commissions. Would you be open to an exploratory 15-minute confidential discussion with our Director at our Sector 67 M3M Urbana office, or would you prefer we stay in touch for a 3-month check-in?`,
       detectedIntent: 'already_joined_negotiation',
+      hrDecisionOutcome: 'INTERVIEW_ELIGIBLE',
       extractedFields: {
         currentCompany: 'Recently Joined Other Firm',
       },
       statusRecommendation: 'Screened - Ready for Interview',
       generatedRemark: {
-        text: `Candidate mentioned having joined another company. Auto-engaged with company requirements & role budget pitch (${roleInfo.fixedBudget} + incentives). Awaiting candidate preference for counter-discussion vs 90-day pipeline.`,
+        text: `Candidate mentioned having joined another company. Auto-engaged with company requirements & role budget pitch (${roleInfo.fixedBudget} + incentives).`,
         priority: 'High',
         category: 'Already Joined - Counter Offer Open',
         actionDueDate: 'Today',
@@ -265,11 +452,12 @@ function computeRawFallbackResponse(
     };
   }
 
-  // SCENARIO 2: Candidate wants 3-month check-in / pipeline
-  if (lower.includes('3 month') || lower.includes('stay in touch') || lower.includes('after some time') || lower.includes('settle in') || lower.includes('later')) {
+  // SCENARIO 8: 90-day pipeline request
+  if (lower.includes('3 month') || lower.includes('stay in touch') || lower.includes('after some time') || lower.includes('settle in')) {
     return {
-      agentReply: `Understood and completely respected! We wish you great success in your initial tenure. I have scheduled an automated 90-day talent check-in alert in our White Collar Realty CRM so our senior team can reconnect with you in December. Best wishes!`,
+      agentReply: `Understood and completely respected! I have scheduled an automated 90-day talent check-in alert in our White Collar Realty CRM so our senior team can reconnect with you in 3 months. Best wishes!`,
       detectedIntent: 'pipeline_future',
+      hrDecisionOutcome: 'FOLLOW_UP_REQUIRED',
       extractedFields: {},
       statusRecommendation: 'Declined - Do Not Call',
       generatedRemark: {
@@ -281,76 +469,7 @@ function computeRawFallbackResponse(
     };
   }
 
-  // SCENARIO 3: Budget / High CTC Negotiation Scenario
-  if (lower.includes('budget') || lower.includes('ctc') || lower.includes('salary') || lower.includes('lpa') && (lower.includes('high') || lower.includes('more') || lower.includes('kam'))) {
-    return {
-      agentReply: `We understand compensation is a key priority. For high performers closing luxury inventory in Gurgaon Golf Course Extension and Dubai, White Collar Realty has flexible budget bands up to ${roleInfo.fixedBudget}, and our closure commissions can easily add 8 to 15 Lakhs on top of your fixed pay. Would you like to sit down with our hiring manager to review the exact incentive matrix?`,
-      detectedIntent: 'budget_negotiation',
-      extractedFields: {
-        expectedSalaryLPA: userMessage,
-      },
-      statusRecommendation: 'Screened - Ready for Interview',
-      generatedRemark: {
-        text: `Salary discussion handled: Candidate discussed CTC expectations. Highlighted White Collar Realty role budget band (${roleInfo.fixedBudget}) and high-ticket luxury closure commission slabs.`,
-        priority: 'High',
-        category: 'Budget Negotiation',
-        actionDueDate: 'Today',
-      },
-    };
-  }
-
-  // SCENARIO 4: Strict Explicit Decline detection
-  if (
-    lower.includes('not interested') ||
-    lower.includes('nahi chahiye') ||
-    lower.includes('decline') ||
-    lower.includes('stop calling') ||
-    lower.includes('do not call') ||
-    lower.includes('remove my name')
-  ) {
-    return {
-      agentReply:
-        'Understood. Thank you for letting us know! We have updated our records and stopped further follow-up calls. We wish you all the very best for your career ahead.',
-      detectedIntent: 'cancel_decline',
-      extractedFields: {},
-      declineReason: userMessage,
-      statusRecommendation: 'Declined - Do Not Call',
-      generatedRemark: {
-        text: `Candidate explicitly declined further interaction. Marked as Do Not Call per company compliance policy.`,
-        priority: 'Low',
-        category: 'Declined - Do Not Call',
-        actionDueDate: undefined,
-      },
-    };
-  }
-
-  // SCENARIO 5: Callback request detection
-  if (
-    lower.includes('call back') ||
-    lower.includes('busy') ||
-    lower.includes('driving') ||
-    lower.includes('meeting') ||
-    lower.includes('baad me') ||
-    lower.includes('sham ko') ||
-    lower.includes('call later')
-  ) {
-    return {
-      agentReply:
-        'Sure, absolutely no problem! We understand you are busy right now. I have noted down a callback alert for today. Our HR team will reconnect with you shortly. Have a safe drive!',
-      detectedIntent: 'request_callback',
-      extractedFields: {},
-      callbackTime: 'Later Today (Requested by Candidate)',
-      statusRecommendation: 'Callback Needed',
-      generatedRemark: {
-        text: `Candidate currently busy / driving. Requested callback for later today. Alert set for HR queue.`,
-        priority: 'High',
-        category: 'Callback Due',
-        actionDueDate: 'Today',
-      },
-    };
-  }
-
-  // SCENARIO 6: Attendance Reminder
+  // SCENARIO 9: Attendance Reminder Scenario (Rule 25)
   if (scenario === 'reminder') {
     if (
       lower.includes('yes') ||
@@ -364,6 +483,7 @@ function computeRawFallbackResponse(
         agentReply:
           'That is wonderful! We have reconfirmed your attendance for your face-to-face interview. Our office is located at 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram. Please carry an updated copy of your resume. Looking forward to meeting you!',
         detectedIntent: 'confirm_interview',
+        hrDecisionOutcome: 'INTERVIEW_ATTENDED',
         extractedFields: { interviewVenueConfirmed: true },
         statusRecommendation: 'Attendance Confirmed',
         generatedRemark: {
@@ -381,8 +501,9 @@ function computeRawFallbackResponse(
       lower.includes('postpone')
     ) {
       return {
-        agentReply: `No worries at all! We can easily reschedule your interview. We have the following upcoming slots available: ${availableSlotList || 'Day after tomorrow at 3:30 PM, or Friday 12:00 PM'}. Which one would suit you better?`,
+        agentReply: `Sure, that's absolutely fine. Let me check the available options: ${availableSlotList || 'Tomorrow at 2:30 PM, or Friday 12:00 PM'}. Which one would suit you better?`,
         detectedIntent: 'reschedule',
+        hrDecisionOutcome: 'INTERVIEW_RESCHEDULE_REQUIRED',
         extractedFields: {},
         statusRecommendation: 'Screened - Ready for Interview',
         generatedRemark: {
@@ -395,7 +516,7 @@ function computeRawFallbackResponse(
     }
   }
 
-  // SCENARIO 7: Missed Interview Follow-up
+  // SCENARIO 10: Missed Interview Follow-up Scenario (Rule 26)
   if (scenario === 'missed_followup') {
     if (
       lower.includes('reschedule') ||
@@ -405,8 +526,9 @@ function computeRawFallbackResponse(
       lower.includes('slot')
     ) {
       return {
-        agentReply: `We completely understand that unexpected priorities come up! We would be delighted to reschedule your face-to-face round at our Sector 67 Gurugram office (M3M Urbana Business Park). We have open slots on ${availableSlotList || 'Tomorrow at 2:30 PM or Friday at 12:00 PM'}. Would you like to confirm one of these?`,
+        agentReply: `We completely understand! We would be delighted to reschedule your face-to-face round at our Sector 67 Gurugram office. We have open slots on ${availableSlotList || 'Tomorrow at 2:30 PM or Friday at 12:00 PM'}. Would you like to confirm one of these?`,
         detectedIntent: 'reschedule',
+        hrDecisionOutcome: 'INTERVIEW_RESCHEDULE_REQUIRED',
         extractedFields: {},
         statusRecommendation: 'Screened - Ready for Interview',
         generatedRemark: {
@@ -419,7 +541,7 @@ function computeRawFallbackResponse(
     }
   }
 
-  // SCENARIO 8: Slot booking detection
+  // SCENARIO 11: Slot booking detection (Rule 22)
   const matchedSlot = availableSlots.find((s: any) =>
     s.isAvailable && lower.includes(s.time.substring(0, 5).toLowerCase()) ||
     (lower.includes('tomorrow') && lower.includes('2:30') && s.id === 'slot-2') ||
@@ -428,11 +550,12 @@ function computeRawFallbackResponse(
     (lower.includes('day after') && s.id === 'slot-4')
   );
 
-  if (matchedSlot || lower.includes('tomorrow') || lower.includes('kal') || lower.includes('book') || lower.includes('schedule')) {
+  if (matchedSlot || lower.includes('tomorrow') || lower.includes('kal') || lower.includes('book') || lower.includes('works great') || lower.includes('perfect') && transcript.length >= 3) {
     const slotToBook = matchedSlot || availableSlots.find((s: any) => s.isAvailable);
     return {
       agentReply: `Perfect! I have scheduled your face-to-face interview for ${slotToBook?.displayLabel || 'Tomorrow at 02:30 PM'} at White Collar Realty Corporate HQ, 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram. We will also send the location details and confirmation letter to your email and phone. Thank you so much and all the best!`,
       detectedIntent: 'confirm_interview',
+      hrDecisionOutcome: 'INTERVIEW_SCHEDULED',
       slotAction: 'booked',
       selectedSlotId: slotToBook?.id || 'slot-2',
       extractedFields: {
@@ -449,77 +572,142 @@ function computeRawFallbackResponse(
     };
   }
 
-  // General screening flow
-  const turnCount = transcript.filter((m: any) => m.sender === 'candidate').length;
-  if (turnCount <= 1) {
+  // SCENARIO 12: Progressive Screening Flow following Rules 12, 13, 14, 16, 19, 20, 21, 22
+  const candidateTurns = transcript.filter((m: any) => m.sender === 'candidate').length;
+
+  // Turn 0: Identity Check response (Rule 12 -> Rule 13)
+  // If candidate just confirmed identity ("Yes", "Speaking", "Haan bol raha hu")
+  if (candidateTurns === 0 || (candidateTurns === 1 && (lower.includes('yes') || lower.includes('speaking') || lower.includes('haan') || lower.includes('bol raha') || lower.includes('this is')))) {
     return {
-      agentReply:
-        'Great to know! Could you also share your total work experience and specifically how many years have been in real estate sales? Also, have you had hands-on exposure to Gurgaon or Dubai properties?',
-      detectedIntent: 'screening_answer',
-      extractedFields: {
-        currentCompany: lower.includes('realty') || lower.includes('consultant') ? userMessage : undefined,
-      },
+      agentReply: `Hi ${candName}, I'm the virtual HR assistant from White Collar Realty. I'm calling regarding your application for the ${candRole} position. Do you have a couple of minutes?`,
+      detectedIntent: 'identity_confirmed',
+      extractedFields: {},
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Screening in progress: Captured candidate current employer. Asking for real estate track record in Gurgaon & Dubai.`,
+        text: `Candidate identity verified per Rule 12. Proceeded to natural introduction and time availability check per Rule 13.`,
         priority: 'Medium',
         category: 'Notice Period Evaluation',
         actionDueDate: 'Today',
       },
     };
-  } else if (turnCount === 2) {
+  }
+
+  // Turn 1: Time check confirmation -> Role confirmation (Rule 13 -> Rule 14)
+  if (candidateTurns === 1 || (candidateTurns === 2 && (lower.includes('yes') || lower.includes('sure') || lower.includes('time') || lower.includes('kahiye') || lower.includes('bolo') || lower.includes('okay')))) {
+    return {
+      agentReply: `You're being considered for the ${candRole} position, correct?`,
+      detectedIntent: 'role_verification',
+      extractedFields: {},
+      statusRecommendation: 'Screening Pending',
+      generatedRemark: {
+        text: `Candidate confirmed time availability. Verifying target role (${candRole}) per Rule 14.`,
+        priority: 'Medium',
+        category: 'Notice Period Evaluation',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
+  // Turn 2: Role verified -> Role-specific screening question (Rule 14 -> Rule 16)
+  if (candidateTurns === 2 || (candidateTurns === 3 && (lower.includes('yes') || lower.includes('correct') || lower.includes('right') || lower.includes('sahi') || lower.includes('ha')))) {
+    const roleQ = roleInfo.roleSpecificQuestions[0] || 'Could you share which real estate company you are currently with, and your experience in Gurgaon property sales?';
+    return {
+      agentReply: `Great! ${roleQ}`,
+      detectedIntent: 'screening_question',
+      extractedFields: {},
+      statusRecommendation: 'Screening Pending',
+      generatedRemark: {
+        text: `Target role confirmed. Initiated role-specific screening per Rule 16 for ${candRole}.`,
+        priority: 'Medium',
+        category: 'Notice Period Evaluation',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
+  // Turn 3: Company & Experience answered -> Ask Salary expectations (Rule 20)
+  if (candidateTurns === 3 || candidateTurns === 4) {
+    const isGurgaon = lower.includes('gurgaon') || lower.includes('golf course') || lower.includes('spr') || lower.includes('dwarka') || lower.includes('dlf') || lower.includes('m3m');
+    const isDubai = lower.includes('dubai');
     return {
       agentReply:
-        'Understood, that is very relevant experience! What is your current fixed salary package, and what are your expectations for this role with White Collar Realty?',
+        'Okay, got it! That gives helpful context. Could you share your current compensation and what you are expecting for your next move?',
       detectedIntent: 'screening_answer',
       extractedFields: {
+        currentCompany: lower.includes('square') ? 'Square Yards' : lower.includes('dlf') ? 'DLF Homes' : lower.includes('anarock') ? 'Anarock' : undefined,
+        realEstateExperienceYears: lower.includes('5') ? 5 : lower.includes('4') ? 4 : lower.includes('6') ? 6 : lower.includes('3') ? 3 : 4,
         gurgaonDubaiExperience: {
-          gurgaon: lower.includes('gurgaon') || lower.includes('ncr'),
-          dubai: lower.includes('dubai'),
+          gurgaon: isGurgaon,
+          dubai: isDubai,
           details: userMessage,
         },
       },
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Real estate domain experience validated for Gurgaon/Dubai. Inquiring on present and expected CTC alignment.`,
+        text: `Real estate domain experience recorded. Asking for present & expected CTC per Rule 20.`,
         priority: 'Medium',
         category: 'Budget Negotiation',
         actionDueDate: 'Today',
       },
     };
-  } else if (turnCount === 3) {
+  }
+
+  // Turn 4: Salary answered -> Ask notice period & location (Rule 21)
+  if (candidateTurns === 4 || candidateTurns === 5) {
     return {
       agentReply:
-        'Got it. Where are you currently based in Delhi NCR, and what is your official notice period or earliest possible joining date?',
+        'Understood. What is your current notice period, and where are you currently based in NCR?',
       detectedIntent: 'screening_answer',
       extractedFields: {
         expectedSalaryLPA: userMessage,
       },
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Candidate stated CTC expectations (${userMessage}). Checking location and notice period feasibility.`,
+        text: `Candidate CTC expectations noted (${userMessage}). Checking notice period and location feasibility per Rule 21.`,
         priority: 'Medium',
         category: 'Notice Period Evaluation',
         actionDueDate: 'Today',
       },
     };
-  } else {
+  }
+
+  // Turn 5: Notice period answered (If 30 days, follow up per Rule 21; otherwise invite for F2F interview per Rule 22)
+  if (lower.includes('30') && !lower.includes('earlier') && !lower.includes('negotiable') && candidateTurns <= 6) {
     return {
-      agentReply: `Thank you for sharing those details! Based on your profile, we would love to invite you for a face-to-face interview at our corporate office: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram. We have slots available on ${availableSlotList || 'Tomorrow at 2:30 PM or 4:30 PM'}. Which slot works best for you?`,
-      detectedIntent: 'screening_answer',
+      agentReply:
+        'Understood. Would an earlier joining be possible if selected?',
+      detectedIntent: 'notice_followup',
       extractedFields: {
-        currentLocation: userMessage,
-        noticePeriodDays: lower.includes('immediate') ? 0 : lower.includes('15') ? 15 : 30,
+        noticePeriodDays: 30,
+        currentLocation: lower.includes('gurgaon') || lower.includes('noida') || lower.includes('delhi') ? userMessage : undefined,
       },
-      statusRecommendation: 'Screened - Ready for Interview',
+      statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `All 7 screening criteria validated. Candidate ready for face-to-face interview booking at Sector 67 HQ.`,
-        priority: 'High',
-        category: 'Interview Scheduled',
-        actionDueDate: 'Tomorrow',
+        text: `Notice period stated as 30 days. Asked follow-up regarding earlier joining possibility per Rule 21.`,
+        priority: 'Medium',
+        category: 'Notice Period Evaluation',
+        actionDueDate: 'Today',
       },
     };
   }
+
+  // Final screening round: Propose face-to-face interview slots (Rule 22)
+  return {
+    agentReply: `Thank you for sharing those details! Based on your background, we would like to invite you for a face-to-face interview at our corporate office: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram. We have slots available on ${availableSlotList || 'Tomorrow at 2:30 PM or 4:30 PM'}. Which slot works best for you?`,
+    detectedIntent: 'screening_answer',
+    hrDecisionOutcome: 'INTERVIEW_ELIGIBLE',
+    extractedFields: {
+      currentLocation: userMessage,
+      noticePeriodDays: lower.includes('immediate') ? 0 : lower.includes('15') ? 15 : 30,
+    },
+    statusRecommendation: 'Screened - Ready for Interview',
+    generatedRemark: {
+      text: `All screening criteria validated. Proposed face-to-face interview slots at Sector 67 HQ per Rule 22.`,
+      priority: 'High',
+      category: 'Interview Scheduled',
+      actionDueDate: 'Tomorrow',
+    },
+  };
 }
 
 function generateFallbackResponse(
