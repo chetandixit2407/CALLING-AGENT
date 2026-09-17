@@ -6,6 +6,7 @@ import {
   WifiOff, HelpCircle
 } from 'lucide-react';
 import { Candidate, CallRecord, ChatMessage } from '../types';
+import { generateStructuredCallSnippet, applyAutoSavedNotesToCandidate } from '../utils/candidateNotes';
 import { 
   vapiService, 
   DEFAULT_VAPI_ASSISTANT_ID, 
@@ -270,7 +271,20 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
       callHistory: [callRecord, ...(candidate.callHistory || [])],
     };
 
-    onCallEnded?.(updatedCandidate);
+    // Automated transcript summary extraction & prepend to candidate notes
+    const snippet = generateStructuredCallSnippet({
+      candidate,
+      transcript: chatMessages,
+      durationSeconds: duration,
+      scenario: 'screening',
+      screening: candidate.screening,
+      outcome: duration > 15 ? 'Vapi Screening Completed' : 'Brief Call Attempt',
+      agentName: 'Arjun AI (Vapi Live Recruiter)',
+    });
+
+    const candidateWithNotes = applyAutoSavedNotesToCandidate(updatedCandidate, snippet);
+
+    onCallEnded?.(candidateWithNotes);
   };
 
   if (!isOpen) return null;
@@ -298,11 +312,14 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
                 <h3 className="text-base font-bold text-white truncate font-['Space_Grotesk']">
                   {candidate?.name || 'Screening Candidate'}
                 </h3>
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
-                  Vapi Voice Assistant
+                <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 flex items-center gap-1 shadow-xs">
+                  <Bot className="w-3 h-3 text-amber-400" />
+                  <span>Agent Arjun • Vapi Live Call Recruiter</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400 flex items-center gap-2 mt-0.5 truncate">
+                <span className="text-amber-300/90 font-medium">Virtual AI HR (White Collar Realty)</span>
+                <span className="text-slate-600">•</span>
                 <span>{candidate?.appliedRole || 'Real Estate Consultant'}</span>
                 {candidate?.screening?.currentCompany && (
                   <>

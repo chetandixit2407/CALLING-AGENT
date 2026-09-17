@@ -4,7 +4,7 @@ import {
   Sparkles, CheckCircle2, AlertTriangle, ArrowUpRight, 
   Building, MapPin, Briefcase, DollarSign, MessageSquare, 
   Bot, Phone, ChevronRight, RefreshCw, Plus, CheckCircle, 
-  HelpCircle, Volume2, Mail, Bell, ShieldAlert, Tag
+  HelpCircle, Volume2, Mail, Bell, ShieldAlert, Tag, X
 } from 'lucide-react';
 import { Candidate, InterviewSlot, CallScenario } from './types';
 import { INITIAL_CANDIDATES, INITIAL_INTERVIEW_SLOTS } from './data/mockCandidates';
@@ -46,6 +46,23 @@ export default function App() {
   const [vapiCallStatus, setVapiCallStatus] = useState<VapiCallStatus>('idle');
   const [vapiCandidate, setVapiCandidate] = useState<Candidate | null>(null);
   const [showVapiModal, setShowVapiModal] = useState<boolean>(false);
+
+  // Auto-saved Notes Toast Notification state
+  const [completionToast, setCompletionToast] = useState<{
+    candidate: Candidate;
+    message: string;
+    timestamp: string;
+  } | null>(null);
+
+  // Auto-dismiss toast after 7 seconds
+  useEffect(() => {
+    if (completionToast) {
+      const timer = setTimeout(() => {
+        setCompletionToast(null);
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [completionToast]);
 
   // Listen to Vapi state events
   useEffect(() => {
@@ -296,6 +313,13 @@ export default function App() {
     if (selectedCandidate && selectedCandidate.id === updatedCandidate.id) {
       setSelectedCandidate(updatedCandidate);
     }
+
+    // Trigger toast notification with View Notes action
+    setCompletionToast({
+      candidate: updatedCandidate,
+      message: `Screening notes auto-saved by Arjun AI for ${updatedCandidate.name}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
 
     setActiveCallCandidate(null);
   };
@@ -952,6 +976,12 @@ export default function App() {
             if (selectedCandidate?.id === updatedCandidate.id) {
               setSelectedCandidate(updatedCandidate);
             }
+            // Trigger toast notification with View Notes action
+            setCompletionToast({
+              candidate: updatedCandidate,
+              message: `Screening notes auto-saved by Arjun AI for ${updatedCandidate.name}`,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            });
           }}
           onSwitchToInteractive={(cand) => {
             setShowVapiModal(false);
@@ -982,6 +1012,10 @@ export default function App() {
           onStartVapiCall={(cand) => handleStartVapiCall(cand)}
           onOpenConfirmationMail={(cand) => setConfirmationMailCandidate(cand)}
           onOpenWhatsApp={(cand, template) => setWhatsAppCandidate({ candidate: cand, template })}
+          onUpdateCandidate={(updated) => {
+            setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+            setSelectedCandidate(updated);
+          }}
         />
       )}
 
@@ -1012,6 +1046,49 @@ export default function App() {
           onClose={() => setWhatsAppCandidate(null)}
           onWhatsAppSent={handleWhatsAppSent}
         />
+      )}
+
+      {/* Auto-Saved Notes Toast Notification */}
+      {completionToast && (
+        <div className="fixed bottom-5 right-5 z-50 max-w-md w-full sm:w-auto bg-slate-900/95 backdrop-blur-md border border-amber-500/40 rounded-2xl p-4 shadow-2xl shadow-black/80 flex items-center justify-between gap-4 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white">Call Completed & Auto-Saved</span>
+                <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                  Notes Ready
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 truncate mt-0.5 max-w-[260px]">
+                {completionToast.message}
+              </p>
+              <span className="text-[10px] text-slate-500">{completionToast.timestamp}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCandidate(completionToast.candidate);
+                setCompletionToast(null);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1 shadow-xs"
+            >
+              <span>View Notes</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCompletionToast(null)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              title="Dismiss toast"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, Phone, Mail, Building, Briefcase, Award, DollarSign, 
   MapPin, Clock, Calendar, CheckCircle2, AlertTriangle, 
   ChevronRight, MessageSquare, Play, Sparkles, UserCheck,
-  Bell, ShieldAlert, History, Tag
+  Bell, ShieldAlert, History, Tag, FileText, Edit3, Save,
+  Check, Copy, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Candidate, CallRecord } from '../types';
 
@@ -14,6 +15,7 @@ interface CandidateDrawerProps {
   onStartVapiCall?: (candidate: Candidate) => void;
   onOpenConfirmationMail?: (candidate: Candidate) => void;
   onOpenWhatsApp?: (candidate: Candidate, template?: 'unanswered' | 'interview_reminder' | 'missed_followup') => void;
+  onUpdateCandidate?: (candidate: Candidate) => void;
 }
 
 export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
@@ -23,10 +25,41 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
   onStartVapiCall,
   onOpenConfirmationMail,
   onOpenWhatsApp,
+  onUpdateCandidate,
 }) => {
   const [selectedCall, setSelectedCall] = useState<CallRecord | null>(null);
+  const [isEditingNotes, setIsEditingNotes] = useState<boolean>(false);
+  const [notesValue, setNotesValue] = useState<string>('');
+  const [copiedSnippetId, setCopiedSnippetId] = useState<string | null>(null);
+  const [isSnippetsAccordionOpen, setIsSnippetsAccordionOpen] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (candidate) {
+      setNotesValue(candidate.notes || '');
+      setIsEditingNotes(false);
+    }
+  }, [candidate?.id, candidate?.notes]);
 
   if (!candidate) return null;
+
+  const handleSaveNotes = () => {
+    if (candidate && onUpdateCandidate) {
+      const updatedCandidate: Candidate = {
+        ...candidate,
+        notes: notesValue.trim(),
+      };
+      onUpdateCandidate(updatedCandidate);
+    }
+    setIsEditingNotes(false);
+  };
+
+  const handleCopyText = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedSnippetId(id);
+    setTimeout(() => {
+      setCopiedSnippetId(null);
+    }, 2000);
+  };
 
   const s = candidate.screening;
 
@@ -279,6 +312,208 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Candidate Notes & Automated Transcripts Card */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900/95 to-[#0b1322] border border-slate-800 shadow-md">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Candidate Notes & Live Transcripts</span>
+                  </h3>
+                  {/* Auto-Saved by Arjun AI Indicator */}
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 mt-0.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                    <span className="font-semibold">Auto-Saved by Arjun AI</span>
+                    {candidate.lastNotesAutoSavedAt && (
+                      <span className="text-slate-400 text-[10px]">
+                        • {new Date(candidate.lastNotesAutoSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                {notesValue && !isEditingNotes && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(notesValue, 'all-notes')}
+                    className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                    title="Copy all notes to clipboard"
+                  >
+                    {copiedSnippetId === 'all-notes' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-300 font-semibold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {isEditingNotes ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNotesValue(candidate.notes || '');
+                        setIsEditingNotes(false);
+                      }}
+                      className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveNotes}
+                      className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition flex items-center gap-1 cursor-pointer shadow-xs"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save Notes</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingNotes(true)}
+                    className="px-3 py-1 text-xs font-semibold rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Edit Notes</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Notes Content */}
+            <div className="mt-3">
+              {isEditingNotes ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={notesValue}
+                    onChange={(e) => setNotesValue(e.target.value)}
+                    rows={7}
+                    placeholder="Enter manual recruiter notes, candidate feedback, or additional background..."
+                    className="w-full bg-slate-950/80 border border-amber-500/40 rounded-xl p-3 text-xs text-slate-100 font-mono leading-relaxed placeholder:text-slate-600 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                  />
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>Markdown and bullet points supported.</span>
+                    <button
+                      type="button"
+                      onClick={handleSaveNotes}
+                      className="text-amber-400 hover:underline font-semibold"
+                    >
+                      Press to save changes
+                    </button>
+                  </div>
+                </div>
+              ) : notesValue.trim() ? (
+                <div className="bg-slate-950/60 rounded-xl p-3.5 border border-slate-800/80 text-xs leading-relaxed text-slate-200 whitespace-pre-line max-h-60 overflow-y-auto pr-1">
+                  {notesValue}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                  <p>No candidate notes recorded yet.</p>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    Notes and call summaries are automatically transcribed and saved by Arjun AI upon call completion.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Expandable Past Call Snippets History Accordion */}
+            {((candidate.notesHistory && candidate.notesHistory.length > 0) || (candidate.callHistory && candidate.callHistory.length > 0)) && (
+              <div className="mt-4 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsSnippetsAccordionOpen(!isSnippetsAccordionOpen)}
+                  className="w-full flex items-center justify-between text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer py-1"
+                >
+                  <div className="flex items-center gap-2">
+                    <History className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Past Call Snippets History ({candidate.notesHistory?.length || candidate.callHistory?.length || 0})</span>
+                  </div>
+                  {isSnippetsAccordionOpen ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  )}
+                </button>
+
+                {isSnippetsAccordionOpen && (
+                  <div className="mt-2.5 space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                    {/* Render from structured notesHistory if available, else from callHistory summaries */}
+                    {(candidate.notesHistory && candidate.notesHistory.length > 0) ? (
+                      candidate.notesHistory.map((snippet) => (
+                        <div
+                          key={snippet.id}
+                          className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2 text-[11px] mb-1.5 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-amber-300">{snippet.title}</span>
+                              <span className="text-slate-500">•</span>
+                              <span className="text-slate-400">{snippet.timestamp}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {snippet.author && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  {snippet.author}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(snippet.snippet, snippet.id)}
+                                className="text-[10px] text-slate-400 hover:text-white flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:bg-slate-800 transition cursor-pointer"
+                                title="Copy snippet"
+                              >
+                                {copiedSnippetId === snippet.id ? (
+                                  <span className="text-emerald-400 font-semibold">Copied!</span>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Copy</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="bg-slate-900/90 rounded-lg p-2.5 text-[11px] text-slate-300 whitespace-pre-line font-mono leading-relaxed border border-slate-800/60">
+                            {snippet.snippet}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      candidate.callHistory.map((call) => (
+                        <div
+                          key={call.id}
+                          className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2 text-[11px] mb-1.5">
+                            <span className="font-bold text-amber-300 uppercase">{call.scenario} Call • {call.outcome}</span>
+                            <span className="text-slate-400">{call.timestamp}</span>
+                          </div>
+                          <p className="bg-slate-900/90 rounded-lg p-2.5 text-[11px] text-slate-300 leading-relaxed">
+                            {call.summary}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

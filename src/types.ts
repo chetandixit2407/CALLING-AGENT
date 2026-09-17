@@ -94,6 +94,18 @@ export interface CandidateRemark {
   author?: string; // 'Arjun (Virtual AI HR)' | 'HR Operations'
 }
 
+export interface CandidateNoteSnippet {
+  id: string;
+  timestamp: string;
+  title: string;
+  snippet: string;
+  callScenario?: string;
+  scenario?: string;
+  callId?: string;
+  durationSeconds?: number;
+  author?: string; // 'Arjun (Virtual AI HR)' | 'Arjun AI (Vapi Recruiter)' | 'HR Operations'
+}
+
 export interface Candidate {
   id: string;
   name: string;
@@ -115,6 +127,8 @@ export interface Candidate {
   callbackTime?: string;
   declineReason?: string;
   notes?: string;
+  notesHistory?: CandidateNoteSnippet[];
+  lastNotesAutoSavedAt?: string;
   // Day-by-day alert & remarks fields
   latestRemark?: CandidateRemark;
   remarksHistory?: CandidateRemark[];

@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { WHITE_COLLAR_JOB_DESCRIPTIONS } from '../data/jobDescriptions';
 import { voiceAudio } from '../utils/audioSpeech';
+import { generateStructuredCallSnippet, applyAutoSavedNotesToCandidate } from '../utils/candidateNotes';
 
 interface VoiceCallModalProps {
   candidate: Candidate;
@@ -36,6 +37,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [voiceSpeechEnabled, setVoiceSpeechEnabled] = useState<boolean>(true);
   const [isAgentSpeaking, setIsAgentSpeaking] = useState<boolean>(false);
+  const [currentSpokenWord, setCurrentSpokenWord] = useState<string>('');
   const [isListening, setIsListening] = useState<boolean>(false);
   const [languageMode, setLanguageMode] = useState<'Auto' | 'English' | 'Hindi'>('Auto');
   const [inputMessage, setInputMessage] = useState<string>('');
@@ -131,6 +133,14 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         window.speechSynthesis.removeEventListener('voiceschanged', updateVoice);
       };
     }
+  }, []);
+
+  // Real-time active word listener for human-cadence visual feedback
+  useEffect(() => {
+    const unsub = voiceAudio.subscribeActiveWord((word) => {
+      setCurrentSpokenWord(word);
+    });
+    return () => unsub();
   }, []);
 
   // Sound & ringtone reference
@@ -273,6 +283,25 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         }
       };
 
+      // Instant Barge-In Protection: cut off speech synthesis the millisecond candidate speech/sound begins
+      recognition.onspeechstart = () => {
+        if (isAgentSpeakingRef.current || voiceAudio.isSpeaking()) {
+          voiceAudio.stopSpeaking();
+          setIsAgentSpeaking(false);
+          isAgentSpeakingRef.current = false;
+          setCurrentSpokenWord('');
+        }
+      };
+
+      recognition.onsoundstart = () => {
+        if (isAgentSpeakingRef.current || voiceAudio.isSpeaking()) {
+          voiceAudio.stopSpeaking();
+          setIsAgentSpeaking(false);
+          isAgentSpeakingRef.current = false;
+          setCurrentSpokenWord('');
+        }
+      };
+
       recognition.onresult = (event: any) => {
         let transcriptResult = '';
         let isFinal = false;
@@ -283,11 +312,12 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
           }
         }
         if (transcriptResult) {
-          // Rule 6: STOP speaking immediately if candidate interrupts or speaks
+          // Instant Barge-In Protection: STOP speaking immediately if candidate interrupts or speaks
           if (isAgentSpeakingRef.current || voiceAudio.isSpeaking()) {
             voiceAudio.stopSpeaking();
             setIsAgentSpeaking(false);
             isAgentSpeakingRef.current = false;
+            setCurrentSpokenWord('');
           }
           // Reset 30s silence timer since candidate is actively speaking!
           if (candidateSilenceTimerRef.current) {
@@ -879,7 +909,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       author: 'Arjun (Virtual AI HR)',
     };
 
-    const updatedCandidate: Candidate = {
+    const baseUpdatedCandidate: Candidate = {
       ...candidate,
       status: finalStatus,
       interviewStatus: finalInterviewStatus,
@@ -895,7 +925,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       callCount: candidate.callCount + 1,
       callbackTime: callbackTime || candidate.callbackTime,
       declineReason: declineReason || candidate.declineReason,
-      notes: summary,
+      notes: candidate.notes || summary,
       scorecard: scorecard || candidate.scorecard,
       conversationMemory: conversationMemory as ConversationMemory,
       hrDecisionOutcome: hrDecisionOutcome,
@@ -927,7 +957,22 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       ],
     };
 
-    onCallEnded(updatedCandidate, bookedSlotId);
+    // Automated Transcript Summary Extraction & Prepend to Candidate Notes
+    const structuredSnippet = generateStructuredCallSnippet({
+      candidate,
+      transcript,
+      durationSeconds: callDuration,
+      scenario,
+      screening: extracted,
+      detectedIntent,
+      outcome: finalStatus,
+      bookedSlot: chosenSlot,
+      agentName: 'Arjun AI (Voice Recruiter)',
+    });
+
+    const finalCandidateWithNotes = applyAutoSavedNotesToCandidate(baseUpdatedCandidate, structuredSnippet);
+
+    onCallEnded(finalCandidateWithNotes, bookedSlotId);
   };
 
   // Simulate unanswered call (Candidate does not pick up)
@@ -1326,6 +1371,32 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-3">
           {/* Left / Center (2 cols): Live Transcript */}
           <div className="lg:col-span-2 flex flex-col h-full border-r border-slate-800 bg-[#090f1d]">
+            {/* Real-Time Visual Feedback: Arjun speaking active word badge */}
+            {isAgentSpeaking && (
+              <div className="bg-gradient-to-r from-amber-950/70 via-slate-900 to-amber-950/70 border-b border-amber-500/30 px-4 py-2 flex items-center justify-between text-xs text-amber-200 shrink-0">
+                <div className="flex items-center gap-2 truncate mr-2">
+                  <span className="flex h-2.5 w-2.5 relative shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                  </span>
+                  <span className="font-bold text-amber-300 shrink-0">Arjun AI Speaking:</span>
+                  {currentSpokenWord ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/25 text-amber-100 border border-amber-500/40 font-mono font-bold text-xs shadow-xs truncate">
+                      <Volume2 className="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0" />
+                      <span>"{currentSpokenWord}"</span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-amber-300/80 italic">Streaming sentence-by-sentence...</span>
+                  )}
+                </div>
+                <div className="hidden sm:flex items-center gap-2 text-[10px] text-amber-400/80 font-mono shrink-0">
+                  <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">0.98x Rate</span>
+                  <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">220ms Pauses</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">Instant Barge-In</span>
+                </div>
+              </div>
+            )}
+
             {/* Scrollable chat/call stream */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
               {transcript.map((msg) => {

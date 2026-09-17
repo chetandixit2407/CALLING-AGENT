@@ -152,7 +152,40 @@ export const INITIAL_CANDIDATES: Candidate[] = [
     lastCallDate: '2026-09-14 16:40',
     callCount: 1,
     unansweredAttempts: 0,
-    notes: 'Strong Dubai and Gurgaon luxury residential background. Ready for face-to-face round.',
+    lastNotesAutoSavedAt: '2026-09-14T16:43:20Z',
+    notes: `[AUTO-SAVED CALL SUMMARY • Arjun AI (Voice Recruiter)]
+Date/Time: 2026-09-14 16:40 | Scenario: screening (Duration: 3m 4s)
+Outcome: Interview Scheduled • In-Person at Sector 67 HQ
+
+• Current: Square Yards (Assistant Manager Sales)
+• Experience: 4 yrs Real Estate (5.5 yrs Total)
+• Markets: Verified Gurgaon & Dubai Luxury Desks (Emaar, Sobha, GCER)
+• CTC: 11 LPA Current -> 15 LPA Fixed + Bonus Expected
+• Availability: 15-day notice period (earliest 1st October)
+• Interview Slot: Tomorrow, 15 Sep at 11:00 AM confirmed at Sector 67 HQ
+• Fit Assessment: Top Tier Candidate. Highly articulate, immediate closer.`,
+    notesHistory: [
+      {
+        id: 'note-hist-2',
+        title: 'Voice Screening Call Transcript Summary',
+        scenario: 'screening',
+        callId: 'call-rec-1',
+        timestamp: '2026-09-14 16:40',
+        durationSeconds: 184,
+        author: 'Arjun AI (Voice Recruiter)',
+        snippet: `[AUTO-SAVED CALL SUMMARY • Arjun AI (Voice Recruiter)]
+Date/Time: 2026-09-14 16:40 | Scenario: screening (Duration: 3m 4s)
+Outcome: Interview Scheduled • In-Person at Sector 67 HQ
+
+• Current: Square Yards (Assistant Manager Sales)
+• Experience: 4 yrs Real Estate (5.5 yrs Total)
+• Markets: Verified Gurgaon & Dubai Luxury Desks (Emaar, Sobha, GCER)
+• CTC: 11 LPA Current -> 15 LPA Fixed + Bonus Expected
+• Availability: 15-day notice period (earliest 1st October)
+• Interview Slot: Tomorrow, 15 Sep at 11:00 AM confirmed at Sector 67 HQ
+• Fit Assessment: Top Tier Candidate. Highly articulate, immediate closer.`,
+      },
+    ],
     latestRemark: {
       id: 'rem-init-2',
       text: 'Face-to-face interview confirmed for Tomorrow at 11:00 AM at Sector 67 Gurugram HQ (M3M Urbana). Candidate verified for both Dubai and Gurgaon luxury desks.',
