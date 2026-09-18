@@ -13,6 +13,17 @@ import {
 import { WHITE_COLLAR_JOB_DESCRIPTIONS } from '../data/jobDescriptions';
 import { voiceAudio } from '../utils/audioSpeech';
 import { GeminiLiveClient } from '../utils/geminiLiveClient';
+import { 
+  generateStructuredCallSnippet, 
+  applyAutoSavedNotesToCandidate, 
+  detectCandidateEndCallIntent 
+} from '../utils/candidateNotes';
+
+interface EndCallAlertState {
+  phrase: string;
+  matchedKeyword: string;
+  countdown: number;
+}
 
 interface VoiceCallModalProps {
   candidate: Candidate;
@@ -104,6 +115,36 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
   const [hrDecisionOutcome, setHrDecisionOutcome] = useState<HrDecisionOutcome | undefined>(candidate.hrDecisionOutcome);
   const [afterCallAction, setAfterCallAction] = useState<AfterCallAction | null>(candidate.afterCallAction || null);
   const [rightPanelTab, setRightPanelTab] = useState<'checklist' | 'memory' | 'action' | 'queries'>('checklist');
+
+  // Candidate end-call / bye intent states
+  const [endCallAlert, setEndCallAlert] = useState<EndCallAlertState | null>(null);
+  const endCallAlertRef = useRef<EndCallAlertState | null>(null);
+  const [savedNotesToast, setSavedNotesToast] = useState<boolean>(false);
+
+  useEffect(() => {
+    endCallAlertRef.current = endCallAlert;
+  }, [endCallAlert]);
+
+  // Auto-cut countdown timer when candidate indicates they want to end conversation
+  useEffect(() => {
+    if (!endCallAlert || callStatus !== 'connected') return;
+
+    if (endCallAlert.countdown <= 0) {
+      handleEndCall();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setEndCallAlert((prev) => {
+        if (!prev) return null;
+        const next = { ...prev, countdown: prev.countdown - 1 };
+        endCallAlertRef.current = next;
+        return next;
+      });
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [endCallAlert?.countdown, endCallAlert, callStatus]);
 
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const liveClientRef = useRef<GeminiLiveClient | null>(null);
@@ -197,6 +238,20 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         }
         return [...prev, msg];
       });
+
+      // Detect candidate intent to end the call (bye, disconnect, cut the call)
+      if (msg.sender === 'candidate') {
+        const { isEnding, matchedPhrase } = detectCandidateEndCallIntent(msg.text);
+        if (isEnding && !endCallAlertRef.current) {
+          const alertInfo: EndCallAlertState = {
+            phrase: msg.text,
+            matchedKeyword: matchedPhrase,
+            countdown: 4,
+          };
+          endCallAlertRef.current = alertInfo;
+          setEndCallAlert(alertInfo);
+        }
+      }
     };
 
     client.onSpeaking = (speaking) => {
@@ -382,6 +437,32 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     // Send to Live WebSocket
     liveClientRef.current.sendText(textToSend);
     setInputMessage('');
+
+    // Check if candidate is saying bye or wants to end conversation
+    const { isEnding, matchedPhrase } = detectCandidateEndCallIntent(textToSend);
+    if (isEnding && !endCallAlertRef.current) {
+      const alertState: EndCallAlertState = {
+        phrase: textToSend,
+        matchedKeyword: matchedPhrase,
+        countdown: 4,
+      };
+      endCallAlertRef.current = alertState;
+      setEndCallAlert(alertState);
+
+      // Provide 1 confirmation response from agent
+      setTimeout(() => {
+        const farewellMsg: ChatMessage = {
+          id: `farewell-${Date.now()}`,
+          sender: 'agent',
+          text: `Thank you so much for your time, ${candidate.name}! I am disconnecting the call now. Have a wonderful day ahead!`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setTranscript((prev) => [...prev, farewellMsg]);
+        try {
+          voiceAudio.speak(farewellMsg.text, { rate: 1.05 });
+        } catch {}
+      }, 500);
+    }
   };
 
   // Smart Answer Quick Responses for Candidate FAQ Queries
@@ -472,29 +553,23 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     terminateAudioPipeline();
     setCallStatus('ended');
 
-    // Build structured summary snippet
-    const summaryLines = [
-      `[AI Voice Call Summary - ${new Date().toLocaleDateString()}]`,
-      `Scenario: ${scenario.toUpperCase()}`,
-      `Duration: ${formatTime(callDuration)}`,
-      `Employer: ${extracted.currentCompany || 'Not recorded'} | Role: ${extracted.currentDesignation || 'Not recorded'}`,
-      `Real Estate Exp: ${extracted.realEstateExperienceYears ? `${extracted.realEstateExperienceYears} yrs` : 'Not specified'}`,
-      `Gurgaon Exposure: ${extracted.gurgaonDubaiExperience?.gurgaon ? 'Yes' : 'No'} | Dubai Exposure: ${extracted.gurgaonDubaiExperience?.dubai ? 'Yes' : 'No'}`,
-      `Salary: ${extracted.currentSalaryLPA || 'Confidential'} (Current) | ${extracted.expectedSalaryLPA || 'Confidential'} (Expected)`,
-      `Notice: ${extracted.noticePeriodDays !== undefined ? `${extracted.noticePeriodDays} days` : 'Immediate'}`,
-      `Location: ${extracted.currentLocation || candidate.location}`,
-      bookedSlotId ? `Scheduled Round 2 F2F at Sector 67 HQ (Slot: ${bookedSlotId})` : `Final Status: ${statusRec}`,
-    ].join('\n');
+    // Generate comprehensive speech-to-text call summary snippet with full conversation exchanges & candidate requirements
+    const snippet = generateStructuredCallSnippet({
+      candidate,
+      transcript,
+      durationSeconds: callDuration,
+      scenario: typeof scenario === 'string' ? scenario : 'screening',
+      screening: {
+        ...candidate.screening,
+        ...extracted,
+      },
+      outcome: bookedSlotId ? `Scheduled Round 2 F2F at Sector 67 HQ (Slot: ${bookedSlotId})` : statusRec,
+      agentName: 'Arjun (Virtual HR)',
+      candidateEndedCall: !!endCallAlertRef.current,
+      endCallPhrase: endCallAlertRef.current?.phrase,
+    });
 
-    const newSnippet = {
-      id: `snippet-${Date.now()}`,
-      timestamp: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      author: 'Arjun (Virtual HR)',
-      title: `${scenario.toUpperCase()} Call Summary`,
-      snippet: summaryLines,
-    };
-
-    const updatedCandidate: Candidate = {
+    const baseUpdatedCandidate: Candidate = {
       ...candidate,
       status: statusRec,
       interviewSlotId: bookedSlotId || candidate.interviewSlotId,
@@ -507,6 +582,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       callbackTime: callbackTime || candidate.callbackTime,
       declineReason: declineReason || candidate.declineReason,
       lastCallDate: new Date().toISOString().split('T')[0],
+      callCount: (candidate.callCount || 0) + 1,
       screening: {
         ...candidate.screening,
         ...extracted,
@@ -520,9 +596,6 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         text: latestGeneratedRemark.text,
         createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       } : candidate.latestRemark,
-      notes: candidate.notes ? `${summaryLines}\n\n---\n\n${candidate.notes}` : summaryLines,
-      lastNotesAutoSavedAt: new Date().toISOString(),
-      notesHistory: [newSnippet, ...(candidate.notesHistory || [])],
       callHistory: [
         {
           id: `call-${Date.now()}`,
@@ -530,14 +603,18 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
           duration: formatTime(callDuration),
           scenario,
           outcome: statusRec,
-          summary: summaryLines,
+          summary: snippet,
           transcript,
         },
         ...candidate.callHistory,
       ],
     };
 
-    onCallEnded(updatedCandidate, bookedSlotId);
+    const fullyUpdatedCandidate = applyAutoSavedNotesToCandidate(baseUpdatedCandidate, snippet);
+
+    onCallEnded(fullyUpdatedCandidate, bookedSlotId);
+    setSavedNotesToast(true);
+    setTimeout(() => setSavedNotesToast(false), 6000);
   };
 
   const formatTime = (secs: number) => {
@@ -565,6 +642,8 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
     const turns = transcript.filter((m) => m.sender === 'candidate').length;
     const commonChips = [
+      { label: '👋 Say Bye ("Thank you, bye!")', text: "Thank you so much Arjun, that sounds great. Bye!" },
+      { label: '🛑 Cut Call ("Please disconnect")', text: "I have to rush now, please cut the call. Goodbye!" },
       { label: '🌟 Dubai Exp (3 Years)', text: "I've worked in Dubai luxury real estate for three years." },
       { label: '🌟 DLF + Gurgaon (4 Years)', text: "I'm currently working with DLF Homes in Gurgaon for four years." },
       { label: '🌟 Office Location?', text: 'Where exactly is your office located in Gurgaon?' },
@@ -715,6 +794,60 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
           </div>
         </div>
 
+        {/* Auto-Saved Notes Confirmation Toast */}
+        {savedNotesToast && (
+          <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border-b border-emerald-500/40 px-4 py-2.5 text-xs text-emerald-300 flex items-center justify-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200 shadow-md">
+            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-semibold">Speech-to-text call summary with full conversation exchanges saved to candidate notes!</span>
+          </div>
+        )}
+
+        {/* CANDIDATE SAY BYE / AUTO-CUT ALERT BANNER */}
+        {endCallAlert && callStatus === 'connected' && (
+          <div className="bg-gradient-to-r from-rose-950/95 via-amber-950/90 to-rose-950/95 border-b border-rose-500/50 px-4 py-3 text-white flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300 shadow-xl shadow-rose-950/50 z-20">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse shrink-0">
+                <PhoneOff className="w-5 h-5 text-rose-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-rose-300 uppercase tracking-wider">Candidate Requested to End Call</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-900/60 text-rose-200 border border-rose-700/50 font-mono font-bold">
+                    {endCallAlert.matchedKeyword}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-200 mt-0.5 truncate">
+                  Candidate said: <span className="text-amber-300 font-semibold italic">"{endCallAlert.phrase}"</span>
+                </p>
+                <p className="text-[11px] text-slate-300">
+                  Agent farewell confirmation acknowledged. Disconnecting call automatically in <span className="text-rose-400 font-bold font-mono text-sm">{endCallAlert.countdown}s</span>...
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setEndCallAlert(null);
+                  endCallAlertRef.current = null;
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 transition cursor-pointer"
+              >
+                Stay on Call
+              </button>
+              <button
+                type="button"
+                onClick={handleEndCall}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <PhoneOff className="w-3.5 h-3.5" />
+                <span>Disconnect Now</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Gemini Live API Status Bar */}
         <div className="bg-slate-950/80 border-b border-slate-800/80 px-4 sm:px-5 py-2 flex items-center justify-between flex-wrap gap-2 text-xs">
           <div className="flex items-center gap-3 flex-wrap">
@@ -764,6 +897,26 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                     <span>Candidate Speaking</span>
                   </div>
                 )}
+
+                <div className="flex items-center gap-1.5 flex-wrap pl-2 border-l border-slate-800">
+                  <span className="text-[10px] text-slate-400 font-medium">Test Auto-Cut:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage("Thank you so much Arjun, that sounds great. Bye!")}
+                    className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[10px] font-semibold transition cursor-pointer"
+                    title="Simulate candidate saying bye"
+                  >
+                    👋 &quot;Thank you, bye!&quot;
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage("I have to rush now, please cut the call.")}
+                    className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[10px] font-semibold transition cursor-pointer"
+                    title="Simulate candidate requesting to disconnect"
+                  >
+                    🛑 &quot;Cut the call&quot;
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>

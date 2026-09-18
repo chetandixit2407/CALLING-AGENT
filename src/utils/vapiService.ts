@@ -25,9 +25,76 @@ type VolumeListener = (volume: number) => void;
 type SpeakingListener = (isAgentSpeaking: boolean) => void;
 
 /**
+ * Detects whether an event or error is actually a normal WebRTC meeting completion / ejection.
+ * Daily.co emits ejection / daily-error events with "Meeting has ended" when the call finishes.
+ */
+export function isMeetingEndedError(err: any): boolean {
+  if (!err) return false;
+
+  // 1. Direct object inspection (Daily.co daily-error structure)
+  if (typeof err === 'object') {
+    if (err.type === 'daily-error') {
+      const innerMsg = err.error?.message?.msg || err.error?.errorMsg || err.error?.msg || '';
+      const innerType = err.error?.message?.type || err.error?.error?.type || '';
+      if (
+        innerType === 'ejected' ||
+        /meeting\s+(has\s+)?ended/i.test(innerMsg) ||
+        /ejected/i.test(innerType) ||
+        /meeting\s+ended/i.test(err.error?.errorMsg || '')
+      ) {
+        return true;
+      }
+    }
+
+    if (err.type === 'ejected') return true;
+    if (err.action === 'error' && /meeting\s+(has\s+)?ended/i.test(err.errorMsg || '')) return true;
+
+    if (typeof err.message === 'string' && (/meeting\s+(has\s+)?ended/i.test(err.message) || /ejected/i.test(err.message))) {
+      return true;
+    }
+  }
+
+  // 2. String representation inspection
+  let raw = '';
+  if (typeof err === 'string') {
+    raw = err;
+  } else {
+    try {
+      raw = JSON.stringify(err);
+    } catch {
+      raw = String(err);
+    }
+  }
+
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes('meeting has ended') ||
+    lower.includes('meeting ended') ||
+    lower.includes('meeting ended due to ejection') ||
+    lower.includes('due to ejection') ||
+    (lower.includes('ejected') && (lower.includes('meeting') || lower.includes('call'))) ||
+    lower.includes('"type":"ejected"') ||
+    lower.includes('participant has been ejected') ||
+    lower.includes('room was closed') ||
+    lower.includes('left-meeting') ||
+    lower.includes('participant-left')
+  );
+}
+
+/**
  * Classifies voice and WebRTC errors into user-friendly actionable categories
  */
 export function classifyVoiceError(err: any): VapiErrorInfo {
+  // Check for normal meeting conclusion first
+  if (isMeetingEndedError(err)) {
+    return {
+      type: 'general',
+      title: 'Call Completed',
+      message: 'The call session has ended.',
+      actionHint: 'Review the conversation transcript and notes below.',
+    };
+  }
+
   let raw = '';
   if (typeof err === 'string') {
     raw = err;
@@ -283,6 +350,13 @@ INTERVIEW SCHEDULING
 Once core screening is completed:
 - Offer available face-to-face interview slots at Sector 67 Gurugram HQ (e.g. Tomorrow at 02:30 PM or 04:30 PM, or Friday at 12:00 PM).
 - Confirm their preferred time, explain venue, and thank them warmly.
+
+============================================================
+CANDIDATE ENDING CALL / SAYING BYE (AUTO CALL DISCONNECT)
+============================================================
+- If candidate says "bye", "goodbye", "thank you bye", "cut the call", "disconnect the call", "call kaat do", "phone rakh raha hu", "that's all", "chalo bye", "tata", "alvida", or indicates they want to end the call:
+  Give EXACTLY ONE warm confirmation farewell sentence: "Thank you so much for your time, ${candName}! I am disconnecting the call now. Have a wonderful day ahead!" (or in Hindi/Hinglish: "Bohat shukriya aapke time ke liye, main call disconnect kar raha hoon. Have a great day ahead!").
+  Do NOT ask any further questions after this farewell. Stop talking so the call cuts automatically.
 
 ============================================================
 CONVERSATION STYLE
@@ -620,6 +694,21 @@ class VapiClientService {
     });
 
     client.on('error', (err: any) => {
+      // 1. Normal meeting end or Daily WebRTC room ejection (e.g. meeting concluded, agent hung up, or room closed)
+      if (isMeetingEndedError(err)) {
+        console.log('Vapi session concluded normally (Meeting has ended notification received):', err);
+        if (this.callStatus !== 'ended') {
+          this.setCallStatus('ended');
+        }
+        return;
+      }
+
+      // 2. If call is already ended, suppress post-hangup teardown errors
+      if (this.callStatus === 'ended') {
+        console.warn('Vapi teardown notice after call ended:', err);
+        return;
+      }
+
       console.error('Vapi client error:', err);
       if (this.isRetryingFallback) {
         console.warn('Vapi client error received during fallback retry; waiting for fallback result.');
@@ -631,6 +720,15 @@ class VapiClientService {
     });
 
     client.on('call-start-failed', (event: any) => {
+      // If room ended or ejected during call start attempt
+      if (isMeetingEndedError(event) || isMeetingEndedError(event?.error)) {
+        console.log('Vapi call-start-failed recognized as meeting ended/ejected:', event);
+        if (this.callStatus !== 'ended') {
+          this.setCallStatus('ended');
+        }
+        return;
+      }
+
       console.error('Vapi call-start-failed:', event);
       if (this.isRetryingFallback) {
         console.warn('Vapi call-start-failed received during fallback retry; waiting for fallback result.');
@@ -811,11 +909,12 @@ class VapiClientService {
    * Stop the active Vapi call
    */
   public stopCall(): void {
+    this.callStatus = 'ended';
     if (this.vapi) {
       try {
         this.vapi.stop();
       } catch (e) {
-        console.error('Error stopping Vapi call:', e);
+        console.warn('Notice stopping Vapi call:', e);
       }
     }
     this.setCallStatus('ended');

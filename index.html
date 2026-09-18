@@ -12,6 +12,46 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        function isMeetingEnded(err) {
+          if (!err) return false;
+          var s = '';
+          if (typeof err === 'string') {
+            s = err;
+          } else if (err && typeof err === 'object') {
+            s = (err.message || '') + ' ' + (err.errorMsg || '') + ' ' + (err.type || '') + ' ' + (JSON.stringify(err) || '');
+          }
+          var l = s.toLowerCase();
+          return l.indexOf('meeting ended due to ejection') !== -1 ||
+                 l.indexOf('meeting has ended') !== -1 ||
+                 (l.indexOf('ejected') !== -1 && (l.indexOf('meeting') !== -1 || l.indexOf('call') !== -1));
+        }
+        var origError = console.error;
+        console.error = function() {
+          for (var i = 0; i < arguments.length; i++) {
+            if (isMeetingEnded(arguments[i])) {
+              console.info('Handled normal meeting conclusion:', arguments[i]);
+              return;
+            }
+          }
+          return origError.apply(console, arguments);
+        };
+        window.addEventListener('error', function(e) {
+          if (isMeetingEnded(e.message) || isMeetingEnded(e.error)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+        window.addEventListener('unhandledrejection', function(e) {
+          if (isMeetingEnded(e.reason)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1051,6 +1051,40 @@ function computeRawFallbackResponse(
     };
   }
 
+  // SCENARIO 0: Candidate says Bye / End Conversation (Auto Call Disconnect with 1 Confirmation)
+  if (
+    lower.match(/\b(bye|goodbye|good\s*bye|byebye|tata|alvida)\b/i) ||
+    lower.includes('cut the call') ||
+    lower.includes('disconnect the call') ||
+    lower.includes('call disconnect') ||
+    lower.includes('end the call') ||
+    lower.includes('hang up') ||
+    lower.includes('call kaat') ||
+    lower.includes('phone rakh') ||
+    lower.includes('rakh raha hu') ||
+    lower.includes('chalo bye') ||
+    lower.includes('thanks bye') ||
+    lower.includes('thank you bye') ||
+    lower.includes("that's all") ||
+    lower.includes('that is all') ||
+    lower.includes('have to go') ||
+    lower.includes('drop off now')
+  ) {
+    return {
+      agentReply: `Thank you so much for your time, ${candName}! I am disconnecting the call now. Have a wonderful day ahead!`,
+      detectedIntent: 'end_call_farewell',
+      hrDecisionOutcome: 'SCREENING_COMPLETED',
+      extractedFields: {},
+      statusRecommendation: 'Screened - Ready for Interview',
+      generatedRemark: {
+        text: `Candidate said farewell / requested to end call. Confirmed 1 farewell message & logged conversation details in candidate notes.`,
+        priority: 'High',
+        category: 'Call Concluded',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
   // SCENARIO 1: Strict Explicit Decline detection (Rule 10)
   if (
     lower.includes('not interested') ||

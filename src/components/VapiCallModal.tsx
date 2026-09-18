@@ -7,7 +7,11 @@ import {
   FileText, Copy, Check
 } from 'lucide-react';
 import { Candidate, CallRecord, ChatMessage, InterviewSlot, CallScenario } from '../types';
-import { generateStructuredCallSnippet, applyAutoSavedNotesToCandidate } from '../utils/candidateNotes';
+import { 
+  generateStructuredCallSnippet, 
+  applyAutoSavedNotesToCandidate, 
+  detectCandidateEndCallIntent 
+} from '../utils/candidateNotes';
 import { 
   vapiService, 
   DEFAULT_VAPI_ASSISTANT_ID, 
@@ -15,8 +19,15 @@ import {
   VapiTranscriptMessage,
   VapiErrorInfo,
   classifyVoiceError,
-  buildVapiAssistantConfig
+  buildVapiAssistantConfig,
+  isMeetingEndedError
 } from '../utils/vapiService';
+
+interface EndCallAlertState {
+  phrase: string;
+  matchedKeyword: string;
+  countdown: number;
+}
 
 interface VapiCallModalProps {
   isOpen: boolean;
@@ -73,11 +84,20 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
   const [copiedNotes, setCopiedNotes] = useState<boolean>(false);
   const hasFinalizedRef = useRef<boolean>(false);
 
+  // Auto-cut call on farewell/bye detection states
+  const [endCallAlert, setEndCallAlert] = useState<EndCallAlertState | null>(null);
+  const endCallAlertRef = useRef<EndCallAlertState | null>(null);
+  const [savedNotesToast, setSavedNotesToast] = useState<boolean>(false);
+
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const durationTimerRef = useRef<any>(null);
   const transcriptRef = useRef<VapiTranscriptMessage[]>([]);
   const durationRef = useRef<number>(0);
   const candidateRef = useRef<Candidate | null>(candidate);
+
+  useEffect(() => {
+    endCallAlertRef.current = endCallAlert;
+  }, [endCallAlert]);
 
   useEffect(() => {
     transcriptRef.current = transcript;
@@ -95,6 +115,28 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [transcript]);
+
+  // Auto-cut countdown timer when candidate indicates they want to end conversation
+  useEffect(() => {
+    if (!endCallAlert || vapiCallStatus !== 'active') return;
+
+    if (endCallAlert.countdown <= 0) {
+      // Countdown finished -> cut the call automatically!
+      handleEndCall();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setEndCallAlert((prev) => {
+        if (!prev) return null;
+        const next = { ...prev, countdown: prev.countdown - 1 };
+        endCallAlertRef.current = next;
+        return next;
+      });
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [endCallAlert?.countdown, endCallAlert, vapiCallStatus]);
 
   // Duration timer
   useEffect(() => {
@@ -120,6 +162,8 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
     if (!isOpen) {
       vapiService.resetToIdle();
       setVapiCallStatus('idle');
+      setEndCallAlert(null);
+      endCallAlertRef.current = null;
       return;
     }
 
@@ -128,15 +172,28 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
     setTranscript([]);
     setDuration(0);
     setIsMuted(false);
+    setEndCallAlert(null);
+    endCallAlertRef.current = null;
+    setSavedNotesToast(false);
 
     // Register event listeners using vapiService.onStatusChange
     const unsubStatus = vapiService.onStatusChange((status, err) => {
+      if (err && isMeetingEndedError(err)) {
+        setVoiceError(null);
+        setErrorMessage(null);
+        setVapiCallStatus('ended');
+        if (candidate) {
+          finalizeCallRecord();
+        }
+        return;
+      }
+
       setVapiCallStatus(status);
-      if (err) {
+      if (err && status === 'error') {
         const info = classifyVoiceError(err);
         setVoiceError(info);
         setErrorMessage(info.message);
-      } else if (status === 'active' || status === 'idle' || status === 'connecting') {
+      } else if (status === 'active' || status === 'idle' || status === 'connecting' || status === 'ended') {
         setVoiceError(null);
         setErrorMessage(null);
       }
@@ -152,6 +209,20 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
         }
         return [...prev, msg];
       });
+
+      // Detect candidate wanting to end the call (e.g. saying bye, disconnect, cut the call)
+      if (msg.sender === 'candidate') {
+        const { isEnding, matchedPhrase } = detectCandidateEndCallIntent(msg.text);
+        if (isEnding && !endCallAlertRef.current) {
+          const alertInfo: EndCallAlertState = {
+            phrase: msg.text,
+            matchedKeyword: matchedPhrase,
+            countdown: 4,
+          };
+          endCallAlertRef.current = alertInfo;
+          setEndCallAlert(alertInfo);
+        }
+      }
     });
 
     const unsubVolume = vapiService.onVolume((vol) => {
@@ -258,6 +329,12 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
       // 5. Start call via vapiService
       await vapiService.startCall(targetAssistant, overrides, key);
     } catch (err: any) {
+      if (isMeetingEndedError(err)) {
+        console.log('Call session completed upon initiation:', err);
+        setVapiCallStatus('ended');
+        finalizeCallRecord();
+        return;
+      }
       console.error('Failed to initiate Vapi call:', err);
       const classified = classifyVoiceError(err);
       setVoiceError(classified);
@@ -428,6 +505,8 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
       geminiSummary: summaryData.summary,
       candidateRequirements: summaryData.candidateRequirements,
       geminiHighlights: summaryData.keyHighlights,
+      candidateEndedCall: !!endCallAlertRef.current,
+      endCallPhrase: endCallAlertRef.current?.phrase,
     });
 
     const updatedCandidate: Candidate = {
@@ -458,6 +537,8 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
     };
 
     onCallEnded?.(fullyUpdatedCandidate);
+    setSavedNotesToast(true);
+    setTimeout(() => setSavedNotesToast(false), 6000);
   };
 
   if (!isOpen) return null;
@@ -466,6 +547,40 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
     const mins = Math.floor(secs / 60);
     const remSecs = secs % 60;
     return `${mins.toString().padStart(2, '0')}:${remSecs.toString().padStart(2, '0')}`;
+  };
+
+  // Quick testing simulator for candidate saying bye / ending call
+  const handleSimulateCandidateSpeech = (text: string) => {
+    const candidateMsg: VapiTranscriptMessage = {
+      id: `sim-cand-${Date.now()}`,
+      sender: 'candidate',
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setTranscript((prev) => [...prev, candidateMsg]);
+
+    const { isEnding, matchedPhrase } = detectCandidateEndCallIntent(text);
+    if (isEnding && !endCallAlertRef.current) {
+      const alertInfo: EndCallAlertState = {
+        phrase: text,
+        matchedKeyword: matchedPhrase,
+        countdown: 4,
+      };
+      endCallAlertRef.current = alertInfo;
+      setEndCallAlert(alertInfo);
+
+      // Trigger 1 confirmation response from agent
+      setTimeout(() => {
+        const agentConfirmation: VapiTranscriptMessage = {
+          id: `sim-agent-${Date.now()}`,
+          sender: 'agent',
+          text: `Thank you so much for your time, ${candidate?.name || 'there'}! I am disconnecting the call now. Have a wonderful day ahead!`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setTranscript((prev) => [...prev, agentConfirmation]);
+      }, 600);
+    }
   };
 
   return (
@@ -575,6 +690,60 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
           </div>
         )}
 
+        {/* Auto-Saved Notes Confirmation Toast */}
+        {savedNotesToast && (
+          <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border-b border-emerald-500/40 px-4 py-2.5 text-xs text-emerald-300 flex items-center justify-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200 shadow-md">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-semibold">Speech-to-text call summary with full conversation exchanges saved to candidate notes!</span>
+          </div>
+        )}
+
+        {/* CANDIDATE SAY BYE / AUTO-CUT ALERT BANNER */}
+        {endCallAlert && vapiCallStatus === 'active' && (
+          <div className="bg-gradient-to-r from-rose-950/95 via-amber-950/90 to-rose-950/95 border-b border-rose-500/50 px-4 py-3 text-white flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300 shadow-xl shadow-rose-950/50 z-20">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse shrink-0">
+                <PhoneOff className="w-5 h-5 text-rose-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-rose-300 uppercase tracking-wider">Candidate Requested to End Call</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-900/60 text-rose-200 border border-rose-700/50 font-mono font-bold">
+                    {endCallAlert.matchedKeyword}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-200 mt-0.5 truncate">
+                  Candidate said: <span className="text-amber-300 font-semibold italic">"{endCallAlert.phrase}"</span>
+                </p>
+                <p className="text-[11px] text-slate-300">
+                  Agent farewell confirmation acknowledged. Disconnecting call automatically in <span className="text-rose-400 font-bold font-mono text-sm">{endCallAlert.countdown}s</span>...
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setEndCallAlert(null);
+                  endCallAlertRef.current = null;
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 transition cursor-pointer"
+              >
+                Stay on Call
+              </button>
+              <button
+                type="button"
+                onClick={handleEndCall}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <PhoneOff className="w-3.5 h-3.5" />
+                <span>Disconnect Now</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Assistant / Audio Visualizer Box */}
         <div className="p-6 bg-slate-950/60 border-b border-slate-800 flex flex-col items-center justify-center text-center relative overflow-hidden">
           {/* Ambient Glow */}
@@ -677,6 +846,29 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
                   />
                 );
               })}
+            </div>
+          )}
+
+          {/* Quick simulation / speech test chips during active call */}
+          {vapiCallStatus === 'active' && (
+            <div className="mt-3.5 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-center gap-2 z-10">
+              <span className="text-[11px] text-slate-400 font-medium">Test Auto-Cut:</span>
+              <button
+                type="button"
+                onClick={() => handleSimulateCandidateSpeech("Thank you so much Arjun, that sounds great. Bye!")}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-500/30 hover:border-amber-400/50 transition cursor-pointer flex items-center gap-1 shadow-xs"
+                title="Simulate candidate saying 'Thank you, bye!' to test 1-confirmation and auto cut"
+              >
+                <span>👋 Candidate says: "Thank you, bye!"</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSimulateCandidateSpeech("I have to drop off now, please cut the call. Goodbye!")}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-900/90 hover:bg-slate-800 text-rose-300 border border-rose-500/30 hover:border-rose-400/50 transition cursor-pointer flex items-center gap-1 shadow-xs"
+                title="Simulate candidate saying 'please cut the call' to test auto cut"
+              >
+                <span>🛑 Candidate says: "Cut the call"</span>
+              </button>
             </div>
           )}
         </div>
