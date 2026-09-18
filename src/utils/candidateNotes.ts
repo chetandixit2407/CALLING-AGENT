@@ -1,4 +1,7 @@
-import { Candidate, ChatMessage, CandidateNoteSnippet, ScreeningData, InterviewSlot } from '../types';
+import { 
+  Candidate, ChatMessage, CandidateNoteSnippet, ScreeningData, InterviewSlot,
+  CandidateRemark, RemarkPriority, ConversationTurnSnippet
+} from '../types';
 
 export interface GenerateSnippetParams {
   candidate: Candidate;
@@ -259,5 +262,187 @@ export function applyAutoSavedNotesToCandidate(
     notes: newNotes,
     notesHistory: updatedHistory,
     lastNotesAutoSavedAt: new Date().toISOString(),
+  };
+}
+
+export interface CreateConversationRemarkParams {
+  candidate: Candidate;
+  transcript: ChatMessage[];
+  durationSeconds: number;
+  scenario?: string;
+  screening?: Partial<ScreeningData>;
+  outcome?: string;
+  bookedSlot?: InterviewSlot | null;
+  agentName?: string;
+  geminiSummary?: string;
+  geminiBulletedRequirements?: string | string[];
+  geminiHighlights?: string[];
+  callId?: string;
+}
+
+/**
+ * Creates an intelligent, speech-to-text converted Remark entry for every candidate & agent conversation record.
+ * Formatted with exact Date and Time and structured breakdown so each conversation is separated like sequential remarks updates.
+ */
+export function createConversationRemarkFromCall({
+  candidate,
+  transcript,
+  durationSeconds,
+  scenario = 'screening',
+  screening = {},
+  outcome,
+  bookedSlot,
+  agentName = 'Arjun AI (Speech-to-Text Voice Engine)',
+  geminiSummary,
+  geminiBulletedRequirements,
+  geminiHighlights,
+  callId,
+}: CreateConversationRemarkParams): CandidateRemark {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timeStr = now.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const formattedDateTime = `${dateStr} • ${timeStr}`;
+
+  const mins = Math.floor(durationSeconds / 60);
+  const secs = durationSeconds % 60;
+  const durationText = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+  const s: Partial<ScreeningData> = {
+    ...(candidate.screening || {}),
+    ...screening,
+  };
+
+  // Candidate speech turns & notable quotes
+  const candidateTurns = transcript.filter((t) => t.sender === 'candidate');
+  const candidateQuotes = candidateTurns
+    .map((t) => t.text.trim())
+    .filter((txt) => txt.length > 15 && !txt.match(/^(yes|no|haan|theek hai|hello|ok|sure)\.?$/i))
+    .slice(0, 3);
+
+  // Extracted bulleted requirements from conversation
+  const bulletedReqs: string[] = [];
+  if (Array.isArray(geminiBulletedRequirements)) {
+    bulletedReqs.push(...geminiBulletedRequirements);
+  } else if (typeof geminiBulletedRequirements === 'string' && geminiBulletedRequirements.trim()) {
+    bulletedReqs.push(
+      ...geminiBulletedRequirements
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+    );
+  } else {
+    // Construct factual conversation requirements
+    bulletedReqs.push(
+      `Role & Desk: ${s.currentDesignation || candidate.appliedRole || 'Senior Property Consultant'} (White Collar Realty Gurugram)`
+    );
+    if (s.expectedSalaryLPA || s.currentSalaryLPA) {
+      bulletedReqs.push(
+        `Spoken CTC: ${s.expectedSalaryLPA ? `Expected ${s.expectedSalaryLPA}` : 'Expected Competitive Fixed'} (Current: ${s.currentSalaryLPA || 'Not stated'})`
+      );
+    }
+    if (s.noticePeriodDays !== undefined) {
+      bulletedReqs.push(`Notice Period Spoken: ${s.noticePeriodDays} days availability`);
+    }
+    if (s.currentLocation) {
+      bulletedReqs.push(`Location Spoken: ${s.currentLocation} (Sector 67 Gurugram commutable)`);
+    }
+    if (s.gurgaonDubaiExperience?.gurgaon || s.gurgaonDubaiExperience?.dubai) {
+      bulletedReqs.push(
+        `Market Expertise: ${[s.gurgaonDubaiExperience?.gurgaon ? 'Gurgaon Luxury' : '', s.gurgaonDubaiExperience?.dubai ? 'Dubai Luxury' : ''].filter(Boolean).join(' + ')}`
+      );
+    }
+  }
+
+  // Key extracted bullet points
+  const keyExtractedPoints: string[] = [];
+  if (s.expectedSalaryLPA) keyExtractedPoints.push(`Exp. CTC: ${s.expectedSalaryLPA}`);
+  if (s.noticePeriodDays !== undefined) keyExtractedPoints.push(`Notice: ${s.noticePeriodDays}d`);
+  if (s.currentLocation) keyExtractedPoints.push(`Loc: ${s.currentLocation}`);
+  if (geminiHighlights && geminiHighlights.length > 0) {
+    keyExtractedPoints.push(...geminiHighlights);
+  }
+
+  // Determine Priority
+  let priority: RemarkPriority = 'Medium';
+  let actionDueDate = 'Today';
+  if (bookedSlot || (outcome && outcome.toLowerCase().includes('scheduled'))) {
+    priority = 'High';
+    actionDueDate = 'Tomorrow';
+  } else if (durationSeconds < 15) {
+    priority = 'Urgent';
+    actionDueDate = 'Today';
+  } else if (s.expectedSalaryLPA && parseFloat(s.expectedSalaryLPA) > 15) {
+    priority = 'High';
+    actionDueDate = 'Today';
+  }
+
+  // Summary Text
+  const summaryText = geminiSummary || 
+    `Voice conversation recorded (${transcript.length} turns, ${durationText}). Converted speech-to-text indicates ${candidate.name} discussed ${candidate.appliedRole}. Spoken requirements logged with date and time.`;
+
+  // Representative dialogue turns sample
+  const transcriptSample: ConversationTurnSnippet[] = transcript.slice(0, 6).map((t) => ({
+    sender: t.sender as 'agent' | 'candidate',
+    text: t.text,
+    timestamp: t.timestamp,
+  }));
+
+  const displayOutcome = outcome || (bookedSlot ? 'F2F Interview Scheduled' : 'Voice Screening Recorded');
+
+  return {
+    id: `rem-conv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    text: `[${formattedDateTime}] Speech-to-Text Conversation Record (${durationText}): ${summaryText}`,
+    priority,
+    category: bookedSlot ? 'Interview Scheduled' : 'Speech-to-Text Call Summary',
+    createdAt: formattedDateTime,
+    actionDueDate,
+    author: agentName,
+    isConversationRecord: true,
+    callScenario: scenario,
+    callDuration: durationText,
+    durationSeconds,
+    speechToTextSummary: summaryText,
+    bulletedRequirements: bulletedReqs,
+    keyExtractedPoints,
+    candidateSpokenQuotes: candidateQuotes,
+    transcriptSample,
+    callOutcome: displayOutcome,
+    callId: callId || `call-${Date.now()}`,
+  };
+}
+
+/**
+ * Applies both the newly generated speech-to-text conversation remark and notes snippet to the candidate.
+ * Keeps every conversation remark separated chronologically in remarksHistory!
+ */
+export function applyConversationRemarkToCandidate(
+  candidate: Candidate,
+  remark: CandidateRemark,
+  snippet?: CandidateNoteSnippet
+): Candidate {
+  const existingRemarks = candidate.remarksHistory || [];
+  const updatedRemarksHistory = [
+    remark,
+    ...existingRemarks.filter((r) => r.id !== remark.id),
+  ];
+
+  let candWithNotes = candidate;
+  if (snippet) {
+    candWithNotes = applyAutoSavedNotesToCandidate(candidate, snippet);
+  }
+
+  return {
+    ...candWithNotes,
+    latestRemark: remark,
+    remarksHistory: updatedRemarksHistory,
+    alertDueDate: (remark.priority === 'Urgent' ? 'Today' : remark.actionDueDate === 'Tomorrow' ? 'Tomorrow' : 'Today') as any,
+    alertReason: `${remark.priority} Priority: ${remark.callOutcome || 'Conversation recording updated with speech-to-text conversion.'}`,
   };
 }

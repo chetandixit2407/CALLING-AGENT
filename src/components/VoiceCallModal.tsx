@@ -16,7 +16,9 @@ import { GeminiLiveClient } from '../utils/geminiLiveClient';
 import { 
   generateStructuredCallSnippet, 
   applyAutoSavedNotesToCandidate, 
-  detectCandidateEndCallIntent 
+  detectCandidateEndCallIntent,
+  createConversationRemarkFromCall,
+  applyConversationRemarkToCandidate
 } from '../utils/candidateNotes';
 
 interface EndCallAlertState {
@@ -519,14 +521,34 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
     terminateAudioPipeline();
     setCallStatus('ended');
 
+    const now = new Date();
+    const formattedDateTime = `${now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} • ${now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
+
+    const unansweredRemark: CandidateRemark = {
+      id: `rem-${Date.now()}`,
+      author: 'Arjun (Virtual HR)',
+      category: 'Unanswered Retry',
+      priority: 'High',
+      actionDueDate: 'Today',
+      text: `[${formattedDateTime}] Voice call attempt unanswered after ringing. Queued for automated WhatsApp reminder sequence.`,
+      createdAt: formattedDateTime,
+      isConversationRecord: true,
+      callScenario: scenario,
+      callDuration: '0:00',
+      durationSeconds: 0,
+      callOutcome: 'Unanswered Call Attempt',
+    };
+
     const updatedCandidate: Candidate = {
       ...candidate,
       status: 'Call Unanswered',
       lastCallDate: new Date().toISOString().split('T')[0],
+      latestRemark: unansweredRemark,
+      remarksHistory: [unansweredRemark, ...(candidate.remarksHistory || [])],
       callHistory: [
         {
           id: `call-${Date.now()}`,
-          timestamp: new Date().toLocaleString(),
+          timestamp: formattedDateTime,
           duration: '0:00',
           scenario,
           outcome: 'Unanswered',
@@ -534,15 +556,6 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         },
         ...candidate.callHistory,
       ],
-      latestRemark: {
-        id: `rem-${Date.now()}`,
-        author: 'Arjun (Virtual HR)',
-        category: 'Outreach & Followup',
-        priority: 'High',
-        actionDueDate: 'Today',
-        text: 'Voice call unanswered after ringing. Sent to WhatsApp reconfirmation queue.',
-        createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      },
     };
 
     onCallEnded(updatedCandidate);
@@ -552,6 +565,8 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
   const handleEndCall = () => {
     terminateAudioPipeline();
     setCallStatus('ended');
+
+    const callOutcomeStr = bookedSlotId ? `Scheduled Round 2 F2F at Sector 67 HQ (Slot: ${bookedSlotId})` : statusRec;
 
     // Generate comprehensive speech-to-text call summary snippet with full conversation exchanges & candidate requirements
     const snippet = generateStructuredCallSnippet({
@@ -563,7 +578,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         ...candidate.screening,
         ...extracted,
       },
-      outcome: bookedSlotId ? `Scheduled Round 2 F2F at Sector 67 HQ (Slot: ${bookedSlotId})` : statusRec,
+      outcome: callOutcomeStr,
       agentName: 'Arjun (Virtual HR)',
       candidateEndedCall: !!endCallAlertRef.current,
       endCallPhrase: endCallAlertRef.current?.phrase,
@@ -587,15 +602,6 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         ...candidate.screening,
         ...extracted,
       },
-      latestRemark: latestGeneratedRemark ? {
-        id: `rem-${Date.now()}`,
-        author: 'Arjun (Virtual HR)',
-        category: latestGeneratedRemark.category,
-        priority: latestGeneratedRemark.priority,
-        actionDueDate: latestGeneratedRemark.actionDueDate || 'Today',
-        text: latestGeneratedRemark.text,
-        createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      } : candidate.latestRemark,
       callHistory: [
         {
           id: `call-${Date.now()}`,
@@ -610,7 +616,24 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       ],
     };
 
-    const fullyUpdatedCandidate = applyAutoSavedNotesToCandidate(baseUpdatedCandidate, snippet);
+    // Generate speech-to-text converted remark update with date and time for this conversation
+    const convRemark = createConversationRemarkFromCall({
+      candidate: baseUpdatedCandidate,
+      transcript,
+      durationSeconds: callDuration,
+      scenario: typeof scenario === 'string' ? scenario : 'screening',
+      screening: extracted,
+      outcome: callOutcomeStr,
+      bookedSlot: bookedSlotId ? availableSlots.find((s) => s.id === bookedSlotId) : null,
+      agentName: 'Arjun AI (Speech-to-Text Voice Engine)',
+      callId: `call-${Date.now()}`,
+    });
+
+    const fullyUpdatedCandidate = applyConversationRemarkToCandidate(
+      baseUpdatedCandidate,
+      convRemark,
+      snippet
+    );
 
     onCallEnded(fullyUpdatedCandidate, bookedSlotId);
     setSavedNotesToast(true);
@@ -975,7 +998,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                 </div>
               )}
 
-              {transcript.map((msg) => (
+              {transcript.map((msg, idx) => (
                 <div
                   key={msg.id}
                   className={`flex flex-col gap-1 max-w-[88%] ${

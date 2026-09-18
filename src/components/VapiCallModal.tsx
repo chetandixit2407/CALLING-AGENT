@@ -10,7 +10,9 @@ import { Candidate, CallRecord, ChatMessage, InterviewSlot, CallScenario } from 
 import { 
   generateStructuredCallSnippet, 
   applyAutoSavedNotesToCandidate, 
-  detectCandidateEndCallIntent 
+  detectCandidateEndCallIntent,
+  createConversationRemarkFromCall,
+  applyConversationRemarkToCandidate
 } from '../utils/candidateNotes';
 import { 
   vapiService, 
@@ -517,23 +519,32 @@ export const VapiCallModal: React.FC<VapiCallModalProps> = ({
       callHistory: [callRecord, ...(activeCand.callHistory || [])],
     };
 
-    const candidateWithNotes = applyAutoSavedNotesToCandidate(updatedCandidate, snippet);
+    // Generate speech-to-text converted remark update with date and time for every conversation record
+    const convRemark = createConversationRemarkFromCall({
+      candidate: activeCand,
+      transcript: chatMessages,
+      durationSeconds: currentDuration,
+      scenario: typeof scenario === 'string' ? scenario : 'screening',
+      outcome: currentDuration > 15 ? 'Vapi Voice Screening Completed (AI Analyzed)' : 'Brief Call Attempt',
+      agentName: 'Arjun AI (Speech-to-Text Voice Recruiter)',
+      geminiSummary: summaryData.summary,
+      geminiBulletedRequirements: summaryData.bulletedSummaryText || summaryData.bulletedRequirements,
+      geminiHighlights: summaryData.keyHighlights,
+      callId: callRecord.id,
+    });
+
+    const candidateWithNotesAndRemarks = applyConversationRemarkToCandidate(
+      updatedCandidate,
+      convRemark,
+      snippet
+    );
 
     const fullyUpdatedCandidate: Candidate = {
-      ...candidateWithNotes,
+      ...candidateWithNotesAndRemarks,
       scorecard: summaryData.scorecard ? {
-        ...candidateWithNotes.scorecard,
+        ...candidateWithNotesAndRemarks.scorecard,
         ...summaryData.scorecard,
-      } : candidateWithNotes.scorecard,
-      latestRemark: summaryData.latestRemark ? {
-        id: `rem-${Date.now()}`,
-        text: summaryData.latestRemark.text,
-        author: 'Arjun AI (Vapi Recruiter)',
-        createdAt: new Date().toISOString(),
-        priority: summaryData.latestRemark.priority || 'High',
-        category: summaryData.latestRemark.category || 'Interview Scheduled',
-        actionDueDate: summaryData.latestRemark.actionDueDate || 'Tomorrow',
-      } : candidateWithNotes.latestRemark,
+      } : candidateWithNotesAndRemarks.scorecard,
     };
 
     onCallEnded?.(fullyUpdatedCandidate);

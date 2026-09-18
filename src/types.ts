@@ -102,16 +102,36 @@ export type RemarkCategory =
   | 'Missed Interview Reschedule'
   | 'Unanswered Retry'
   | 'Attendance Reconfirmation'
-  | 'Declined - Do Not Call';
+  | 'Declined - Do Not Call'
+  | 'Speech-to-Text Call Summary'
+  | 'Voice Screening Recorded'
+  | string;
+
+export interface ConversationTurnSnippet {
+  sender: 'agent' | 'candidate';
+  text: string;
+  timestamp?: string;
+}
 
 export interface CandidateRemark {
   id: string;
   text: string;
   priority: RemarkPriority;
   category: RemarkCategory;
-  createdAt: string;
+  createdAt: string; // Formatted date & time, e.g. "18 Sep 2026, 05:42 PM"
   actionDueDate?: string; // e.g. 'Today', 'Tomorrow', 'Overdue', 'In 3 Days', or 'In 30 Days'
-  author?: string; // 'Arjun (Virtual AI HR)' | 'HR Operations'
+  author?: string; // 'Arjun (Virtual AI HR)' | 'HR Operations' | 'Arjun AI (Speech-to-Text Voice Engine)'
+  isConversationRecord?: boolean;
+  callScenario?: string;
+  callDuration?: string;
+  durationSeconds?: number;
+  speechToTextSummary?: string;
+  bulletedRequirements?: string[];
+  keyExtractedPoints?: string[];
+  candidateSpokenQuotes?: string[];
+  transcriptSample?: ConversationTurnSnippet[];
+  callOutcome?: string;
+  callId?: string;
 }
 
 export interface CandidateNoteSnippet {

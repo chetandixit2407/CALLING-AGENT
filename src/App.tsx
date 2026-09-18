@@ -26,6 +26,7 @@ import { CandidatePriorityBadge } from './components/CandidatePriorityBadge';
 import { GmailSequenceModal } from './components/GmailSequenceModal';
 import { GoogleCalendarSyncModal } from './components/GoogleCalendarSyncModal';
 import { VoiceSentimentAnalyticsDashboard } from './components/VoiceSentimentAnalyticsDashboard';
+import { TranscriptChatView } from './components/TranscriptChatView';
 import { vapiService, VapiCallStatus, DEFAULT_VAPI_ASSISTANT_ID } from './utils/vapiService';
 import { 
   getTeamAutomationConfig, 
@@ -1111,22 +1112,24 @@ export default function App() {
                         {call.summary}
                       </div>
 
-                      {/* Transcript Accordion */}
-                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                        {call.transcript.map((msg) => (
+                      {/* Transcript Items */}
+                      <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                        {call.transcript.map((msg, mIdx) => (
                           <div
-                            key={msg.id}
-                            className={`p-2 rounded-lg text-xs ${
+                            key={msg.id || mIdx}
+                            className={`p-2.5 rounded-xl text-xs transition border ${
                               msg.sender === 'agent'
-                                ? 'bg-amber-950/20 text-amber-200 border border-amber-500/20'
-                                : 'bg-slate-800 text-slate-200'
+                                ? 'bg-amber-950/20 text-slate-200 border-amber-500/20'
+                                : 'bg-slate-800/90 text-slate-200 border-slate-700/60'
                             }`}
                           >
                             <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold mb-0.5">
-                              <span>{msg.sender === 'agent' ? 'Arjun (White Collar HR)' : call.candidateName}</span>
-                              <span>{msg.timestamp}</span>
+                              <span className={msg.sender === 'agent' ? 'text-amber-300' : 'text-slate-300'}>
+                                {msg.sender === 'agent' ? 'Arjun (White Collar HR)' : call.candidateName}
+                              </span>
+                              <span className="font-mono text-[9px]">{msg.timestamp}</span>
                             </div>
-                            <div>{msg.text}</div>
+                            <div className="leading-relaxed">{msg.text}</div>
                           </div>
                         ))}
                       </div>

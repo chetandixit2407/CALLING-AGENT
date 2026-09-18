@@ -402,30 +402,58 @@ export const VoiceSentimentAnalyticsDashboard: React.FC<VoiceSentimentAnalyticsD
                   </div>
                 </div>
 
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-300 max-h-56 overflow-y-auto space-y-2.5 leading-relaxed">
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-300 max-h-64 overflow-y-auto space-y-2.5 leading-relaxed">
                   {selectedCandidate.callHistory && selectedCandidate.callHistory.length > 0 && selectedCandidate.callHistory[selectedCandidate.callHistory.length - 1].transcript ? (
-                    selectedCandidate.callHistory[selectedCandidate.callHistory.length - 1].transcript
-                      .split('\n')
-                      .filter(Boolean)
-                      .map((line, lIdx) => {
-                        const isCand = line.toLowerCase().startsWith('candidate:') || line.toLowerCase().startsWith('applicant:');
-                        const isArjun = line.toLowerCase().startsWith('arjun') || line.toLowerCase().startsWith('recruiter:');
+                    (() => {
+                      const lastCall = selectedCandidate.callHistory[selectedCandidate.callHistory.length - 1];
+                      const raw = lastCall.transcript as any;
+                      const turns: { id: string; sender: 'agent' | 'candidate'; text: string; label: string }[] = 
+                        Array.isArray(raw)
+                          ? raw.map((m: any, idx: number) => ({
+                              id: m.id || `analytic-${lastCall.id}-${idx}`,
+                              sender: m.sender === 'agent' ? ('agent' as const) : ('candidate' as const),
+                              text: m.text || '',
+                              label: m.sender === 'agent' ? 'Arjun (Virtual HR)' : (selectedCandidate.name || 'Candidate'),
+                            }))
+                          : typeof raw === 'string'
+                          ? raw
+                              .split('\n')
+                              .filter(Boolean)
+                              .map((line: string, idx: number) => {
+                                const isCand = line.toLowerCase().startsWith('candidate:') || line.toLowerCase().startsWith('applicant:');
+                                return {
+                                  id: `analytic-str-${idx}`,
+                                  sender: isCand ? ('candidate' as const) : ('agent' as const),
+                                  text: line,
+                                  label: isCand ? (selectedCandidate.name || 'Candidate') : 'Arjun (Virtual HR)',
+                                };
+                              })
+                          : [];
 
+                      if (turns.length === 0) {
                         return (
-                          <div
-                            key={lIdx}
-                            className={`p-2 rounded-lg border ${
-                              isCand
-                                ? 'bg-indigo-950/30 border-indigo-500/30 text-indigo-200'
-                                : isArjun
-                                ? 'bg-purple-950/30 border-purple-500/30 text-purple-200'
-                                : 'bg-slate-900/60 border-slate-800 text-slate-300'
-                            }`}
-                          >
-                            {line}
+                          <div className="text-slate-400 italic">
+                            {selectedCandidate.notes || 'Virtual HR Screening completed.'}
                           </div>
                         );
-                      })
+                      }
+
+                      return turns.map((turn, tIdx) => (
+                        <div
+                          key={turn.id || tIdx}
+                          className={`p-2.5 rounded-lg border ${
+                            turn.sender === 'candidate'
+                              ? 'bg-indigo-950/30 border-indigo-500/30 text-indigo-200'
+                              : 'bg-purple-950/30 border-purple-500/30 text-purple-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-[10px] font-bold opacity-80 mb-1">
+                            <span>{turn.label}</span>
+                          </div>
+                          <div className="font-sans text-xs leading-relaxed">{turn.text}</div>
+                        </div>
+                      ));
+                    })()
                   ) : (
                     <div className="text-slate-400 italic">
                       {selectedCandidate.notes || 'Virtual HR Screening completed. Candidate confirmed attendance for face-to-face evaluation.'}

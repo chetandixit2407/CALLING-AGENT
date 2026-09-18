@@ -9,6 +9,8 @@ import {
 import { Candidate, CallRecord } from '../types';
 import { CandidatePriorityBadge } from './CandidatePriorityBadge';
 import { generateCandidateHRAnalysisSummary, generateAutomatedAlerts } from '../utils/candidateAnalysisEngine';
+import { ConversationRemarksTimeline } from './ConversationRemarksTimeline';
+import { TranscriptChatView } from './TranscriptChatView';
 
 interface CandidateDrawerProps {
   candidate: Candidate | null;
@@ -335,27 +337,14 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                 <span className="truncate">{candidate.alertReason}</span>
               </div>
             )}
+          </div>
 
-            {/* Past Remarks History Accordion */}
-            {candidate.remarksHistory && candidate.remarksHistory.length > 1 && (
-              <div className="mt-3 pt-3 border-t border-slate-800/80">
-                <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5 mb-2">
-                  <History className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Previous Remarks History ({candidate.remarksHistory.length})</span>
-                </div>
-                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
-                  {candidate.remarksHistory.slice(1).map((rem) => (
-                    <div key={rem.id} className="p-2 rounded-lg bg-slate-950/40 border border-slate-800 text-[11px] text-slate-400">
-                      <div className="flex items-center justify-between text-[10px] text-slate-500 mb-0.5">
-                        <span className="font-semibold text-slate-300">{rem.category} ({rem.priority})</span>
-                        <span>{rem.createdAt}</span>
-                      </div>
-                      <p className="text-slate-300 line-clamp-2">{rem.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+          {/* Dedicated Conversation Recordings & Speech-to-Text Remarks Updates Section */}
+          <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-[#0c1628] border border-slate-800 shadow-md">
+            <ConversationRemarksTimeline
+              candidate={candidate}
+              onAddRemark={onUpdateCandidate}
+            />
           </div>
 
           {/* HR Conversation Summary & Automated Alerts Block */}
@@ -865,33 +854,29 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                       {call.summary}
                     </p>
 
-                    <button
-                      onClick={() => setSelectedCall(selectedCall?.id === call.id ? null : call)}
-                      className="text-xs text-amber-400 hover:text-amber-300 font-medium inline-flex items-center gap-1"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>{selectedCall?.id === call.id ? 'Hide Full Transcript' : `View Full Transcript (${call.transcript.length} turns)`}</span>
-                    </button>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <button
+                        onClick={() => setSelectedCall(selectedCall?.id === call.id ? null : call)}
+                        className="text-xs text-amber-400 hover:text-amber-300 font-medium inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>{selectedCall?.id === call.id ? 'Hide Full Transcript' : `View Full Transcript (${call.transcript.length} turns)`}</span>
+                      </button>
 
-                    {/* Expandable transcript */}
+                      <span className="text-[11px] text-slate-400">
+                        {call.transcript.length} conversation turns
+                      </span>
+                    </div>
+
+                    {/* Expandable transcript with auto-scroll */}
                     {selectedCall?.id === call.id && (
-                      <div className="mt-3 pt-3 border-t border-slate-800 space-y-2 max-h-64 overflow-y-auto pr-1">
-                        {call.transcript.map((msg) => (
-                          <div
-                            key={msg.id}
-                            className={`p-2.5 rounded-lg text-xs ${
-                              msg.sender === 'agent'
-                                ? 'bg-amber-950/20 border border-amber-500/20 text-slate-200'
-                                : 'bg-slate-800 text-slate-300'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between font-bold text-[10px] text-slate-400 mb-1">
-                              <span>{msg.sender === 'agent' ? 'Arjun (White Collar HR)' : candidate.name}</span>
-                              <span>{msg.timestamp}</span>
-                            </div>
-                            <div>{msg.text}</div>
-                          </div>
-                        ))}
+                      <div className="mt-3 pt-3 border-t border-slate-800">
+                        <TranscriptChatView
+                          transcript={call.transcript}
+                          candidateName={candidate.name}
+                          agentLabel="Arjun (White Collar HR)"
+                          maxHeightClass="max-h-80"
+                        />
                       </div>
                     )}
                   </div>
