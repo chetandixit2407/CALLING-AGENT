@@ -1,12 +1,18 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { setupGeminiLiveWebSocket } from './serverLiveBridge';
+import { WHITE_COLLAR_JOB_DESCRIPTIONS } from './src/data/jobDescriptions';
+import { JobDescription } from './src/types';
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
+setupGeminiLiveWebSocket(server, app);
 const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
@@ -90,153 +96,68 @@ app.post('/api/vapi-config', (req, res) => {
   });
 });
 
-// White Collar Realty Job Descriptions & Specifications
-interface RoleJDInfo {
-  title: string;
-  department: string;
-  location: string;
-  minExperienceYears: number;
-  minRealEstateExpYears: number;
-  fixedBudget: string;
-  totalOte: string;
-  seniority: string;
-  marketFocus: string;
-  noticePeriodExpectation: string;
-  responsibilities: string[];
-  requiredSkills: string[];
-  roleSpecificQuestions: string[];
-}
-
-const WHITE_COLLAR_JDS: Record<string, RoleJDInfo> = {
-  sales_manager: {
-    title: 'Sales Manager (Luxury Real Estate)',
-    department: 'Luxury Residential & Commercial Sales (Gurgaon & Dubai)',
-    location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
-    minExperienceYears: 4,
-    minRealEstateExpYears: 3,
-    fixedBudget: '14 - 22 LPA fixed',
-    totalOte: '25 - 35 LPA OTE with luxury closings',
-    seniority: 'Leadership / Squad Head',
-    marketFocus: 'Gurgaon Luxury Corridors (Golf Course Ext, SPR, Dwarka Expressway) & Dubai Freehold',
-    noticePeriodExpectation: 'Immediate to 30 days max',
-    responsibilities: [
-      'Lead and mentor a high-performing squad of 8 to 15 Property Consultants',
-      'Drive monthly gross booking targets of ₹15–30 Cr across DLF, M3M, Godrej, Emaar, and Sobha inventories',
-      'Conduct high-ticket negotiations and closing meetings with HNIs and NRI investors',
-      'Facilitate client investment roadshows for Dubai off-plan luxury projects',
-    ],
-    requiredSkills: [
-      'Team Leadership & Squad Target Accountability',
-      'High-Ticket Real Estate Negotiation & Closing',
-      'Gurugram Circle Rates, RERA & Dubai Freehold Regulations',
-      'HNI & Corporate Network in Delhi NCR',
-    ],
-    roleSpecificQuestions: [
-      'How large was the sales team you were managing in your last role?',
-      'Were you personally accountable for monthly squad targets, and what was your run-rate?',
-      'Which Gurgaon luxury developer projects or Dubai portfolios have you actively closed?',
-      'What has been your average ticket size and closing conversion ratio?',
-    ],
-  },
-  property_consultant: {
-    title: 'Property Consultant / Senior Property Consultant',
-    department: 'Direct Sales & HNI Client Advisory',
-    location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
-    minExperienceYears: 2,
-    minRealEstateExpYears: 1.5,
-    fixedBudget: '10 - 16 LPA fixed',
-    totalOte: '18 - 25 LPA OTE with direct transaction commissions',
-    seniority: 'Property Consultant / Specialist',
-    marketFocus: 'Gurugram Primary Luxury Residential & High-Street Commercial Corridors',
-    noticePeriodExpectation: 'Immediate to 30 days',
-    responsibilities: [
-      'Manage end-to-end buyer journey from qualified lead engagement to site visit and booking',
-      'Present luxury residential layouts (₹2 Cr – ₹15 Cr+) and commercial retail assets to clients',
-      'Coordinate site visits at M3M, DLF, SmartWorld, and Elan sites across Gurugram',
-      'Negotiate terms and facilitate booking documentation per developer guidelines',
-    ],
-    requiredSkills: [
-      'Consultative Property Selling & Lead Conversion',
-      'Gurugram Micro-Market & Infrastructure Understanding',
-      'Relationship Building with HNI Buyers',
-      'Fluent Spoken English & Corporate Communication',
-    ],
-    roleSpecificQuestions: [
-      'How many years have you been handling direct real estate property sales in Gurgaon?',
-      'What category of properties (Luxury Residential, Plots, or Commercial) have you primarily closed?',
-      'What has been your typical monthly lead-to-site-visit and booking conversion rate?',
-      'Have you closed any deals in Golf Course Extension Road or SPR in the last 6 months?',
-    ],
-  },
-  business_development: {
-    title: 'Business Development Manager / Corporate Sales',
-    department: 'Institutional & Channel Partner Sales',
-    location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
-    minExperienceYears: 3,
-    minRealEstateExpYears: 2,
-    fixedBudget: '6 - 10 LPA fixed',
-    totalOte: '12 - 18 LPA OTE with incentives',
-    seniority: 'Direct Sales Associate',
-    marketFocus: 'Delhi NCR Corporate Alliances & Channel Partner Network',
-    noticePeriodExpectation: 'Immediate to 30 days',
-    responsibilities: [
-      'Onboard and activate tier-1 Channel Partners and independent wealth brokers across NCR',
-      'Structure joint customer engagement sessions and project launch briefings',
-      'Drive corporate tie-ups with MNCs across Cyber City, Golf Course Road, and Udyog Vihar',
-    ],
-    requiredSkills: [
-      'Channel Partner Network Development',
-      'B2B Corporate Real Estate Presentation',
-      'Revenue Forecasting and Pipeline Review',
-    ],
-    roleSpecificQuestions: [
-      'How many active Channel Partners did you manage in your network in Gurgaon?',
-      'Have you handled corporate desk activations or NRI roadshows?',
-      'What was your average monthly revenue generated through broker networks?',
-    ],
-  },
-  hr_recruiter: {
-    title: 'HR Recruiter / Talent Acquisition Specialist (Real Estate)',
-    department: 'Human Resources & Talent Acquisition',
-    location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
-    minExperienceYears: 2,
-    minRealEstateExpYears: 1,
-    fixedBudget: '6 - 10 LPA fixed',
-    totalOte: '8 - 14 LPA with hiring SLA incentives',
-    seniority: 'Talent Acquisition Specialist',
-    marketFocus: 'Real Estate Sales Talent Sourcing across Gurugram & Delhi NCR',
-    noticePeriodExpectation: 'Immediate to 30 days',
-    responsibilities: [
-      'Source, screen, and headhunt top-performing real estate sales professionals across Delhi NCR',
-      'Manage end-to-end recruitment lifecycle from initial telephonic screening to offer rollout',
-      'Coordinate interview schedules with Sales Directors and Department Heads',
-      'Maintain candidate pipeline, ATS tracking, and recruitment SLA metrics',
-    ],
-    requiredSkills: [
-      'Real Estate Talent Sourcing & Headhunting',
-      'Candidate Telephonic & Voice Screening',
-      'Offer Negotiation & Onboarding SLAs',
-      'Portal Sourcing (Naukri, LinkedIn, Referrals)',
-    ],
-    roleSpecificQuestions: [
-      'How many years of candidate sourcing and recruitment experience do you have in real estate?',
-      'What is your monthly closure run-rate for sales consultant and managerial profiles?',
-      'Which sourcing channels have yielded your highest quality hires?',
-    ],
-  },
-};
-
 // Helper to determine role budget and pitch for White Collar Realty
-function getRoleBudgetInfo(roleName?: string): RoleJDInfo {
+function getRoleBudgetInfo(roleName?: string): JobDescription {
   const r = (roleName || '').toLowerCase();
-  if (r.includes('hr') || r.includes('recruit') || r.includes('talent') || r.includes('acquisition') || r.includes('people')) {
-    return WHITE_COLLAR_JDS['hr_recruiter'];
-  } else if (r.includes('lead') || r.includes('manager') || r.includes('dubai') || r.includes('head') || r.includes('vp')) {
-    return WHITE_COLLAR_JDS['sales_manager'];
-  } else if (r.includes('associate') || r.includes('advisor') || r.includes('bd') || r.includes('business')) {
-    return WHITE_COLLAR_JDS['business_development'];
+  
+  // Tech Internships
+  if (r.includes('intern') && (r.includes('tech') || r.includes('software') || r.includes('developer') || r.includes('code') || r.includes('web') || r.includes('frontend') || r.includes('full stack') || r.includes('sde'))) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['software_engineering_intern'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
   }
-  return WHITE_COLLAR_JDS['property_consultant'];
+  if (r.includes('intern') && (r.includes('ai') || r.includes('ml') || r.includes('prompt') || r.includes('voice') || r.includes('llm') || r.includes('agent'))) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['ai_ml_intern'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+  if (r.includes('intern') && (r.includes('data') || r.includes('analytics') || r.includes('research') || r.includes('bi') || r.includes('sql'))) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['data_analytics_intern'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+  if (r.includes('intern') && (r.includes('hr') || r.includes('recruit') || r.includes('talent') || r.includes('people'))) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['hr_intern'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+  if (r.includes('intern') && (r.includes('sales') || r.includes('business') || r.includes('real estate') || r.includes('marketing'))) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['real_estate_sales_intern'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+  if (r.includes('intern')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['software_engineering_intern'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+
+  // Full-time Tech Roles
+  if (r.includes('ai') || r.includes('ml') || r.includes('machine learning') || r.includes('prompt') || r.includes('voice agent') || r.includes('nlp')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['ai_ml_engineer'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+  if (r.includes('full stack') || r.includes('frontend') || r.includes('react') || r.includes('software engineer') || r.includes('sde') || r.includes('web developer')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['full_stack_developer'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+  if (r.includes('backend') || r.includes('python') || r.includes('node') || r.includes('database') || r.includes('infrastructure')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['backend_engineer'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+
+  // HR Roles
+  if (r.includes('hr') || r.includes('recruit') || r.includes('talent') || r.includes('acquisition') || r.includes('people') || r.includes('sourcer')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['hr_recruiter'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+
+  // Dubai / International
+  if (r.includes('dubai') || r.includes('international') || r.includes('cross-border') || r.includes('nri') || r.includes('emaar')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['dubai_advisor'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+
+  // Sales Management / Leadership
+  if (r.includes('lead') || r.includes('manager') || r.includes('head') || r.includes('vp') || r.includes('director') || r.includes('squad')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['sales_manager'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+
+  // Business Development / Alliances
+  if (r.includes('bd') || r.includes('business development') || r.includes('channel') || r.includes('alliance') || r.includes('partner') || r.includes('broker')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['business_development'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+
+  // Presales / Tele-calling
+  if (r.includes('presales') || r.includes('tele') || r.includes('calling') || r.includes('inbound') || r.includes('inside sales')) {
+    return WHITE_COLLAR_JOB_DESCRIPTIONS['presales_specialist'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
+  }
+
+  // Default to Property Consultant
+  return WHITE_COLLAR_JOB_DESCRIPTIONS['property_consultant'] || Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS)[0];
 }
 
 function mapStatusToHrOutcome(statusRec?: string, intent?: string): string {
@@ -285,6 +206,14 @@ export interface ConversationStateInventory {
   identityConfirmed: boolean;
   interestConfirmed: boolean;
   roleConfirmed: boolean;
+  educationDetails: string | null;
+  educationDegree: string | null;
+  educationCollege: string | null;
+  graduationYear: string | null;
+  isTechRole: boolean;
+  isInternship: boolean;
+  techProjects: string | null;
+  programmingLanguages: string | null;
   currentCompany: string | null;
   designation: string | null;
   experienceYears: number | null;
@@ -294,6 +223,7 @@ export interface ConversationStateInventory {
   salaryDeclined: boolean;
   currentLocation: string | null;
   noticePeriodDays: number | null;
+  workFromOfficeAgreed: boolean;
   roleSpecificAnswered: boolean;
   interviewScheduled: boolean;
   knownList: string[];
@@ -302,25 +232,31 @@ export interface ConversationStateInventory {
 }
 
 /**
- * Robust Anti-Repetition State Guard & Memory Engine
- * Adheres strictly to User Mandate:
- * 1. Identify the required field.
- * 2. Check whether it is already known (CRM file or past turns).
- * 3. If known -> skip.
- * 4. If unknown -> ask.
- * 5. After answer -> save.
- * 6. Move to next missing field.
- * NEVER ask the same question twice. Treat candidate short answers as final.
+ * Robust Anti-Repetition State Guard & Memory Engine for 1st Round HR Screening
+ * Tracks: Introduction -> Education -> (If Tech: Projects & Languages) -> (If Sales: Experience & Projects) -> Compensation -> Notice -> WFO Gurugram -> Interview Slots.
  */
 export function buildConversationStateInventory(
   candidate: any,
   transcript: any[] = [],
   currentMessage: string = ''
 ): ConversationStateInventory {
+  const roleInfo = getRoleBudgetInfo(candidate?.appliedRole);
+  const isTechRole = Boolean(roleInfo.isTechRole);
+  const isInternship = Boolean(roleInfo.isInternship);
+
   // 1. Initialize from CRM on file
   let identityConfirmed = false;
   let interestConfirmed = false;
   let roleConfirmed = false;
+  
+  let educationDegree: string | null = candidate?.screening?.educationDegree || null;
+  let educationCollege: string | null = candidate?.screening?.educationCollege || null;
+  let graduationYear: string | null = candidate?.screening?.graduationYear || null;
+  let educationDetails: string | null = educationDegree || candidate?.screening?.education || null;
+
+  let techProjects: string | null = candidate?.screening?.techProjectsSummary || null;
+  let programmingLanguages: string | null = candidate?.screening?.programmingLanguages?.join(', ') || null;
+
   let currentCompany: string | null =
     candidate?.screening?.currentCompany || candidate?.conversationMemory?.current_company || null;
   let designation: string | null =
@@ -345,6 +281,7 @@ export function buildConversationStateInventory(
       : candidate?.conversationMemory?.notice_period
       ? parseInt(candidate.conversationMemory.notice_period, 10)
       : null;
+  let workFromOfficeAgreed = Boolean(candidate?.screening?.workFromOfficeAgreed);
   let roleSpecificAnswered = false;
   let interviewScheduled = false;
 
@@ -374,35 +311,88 @@ export function buildConversationStateInventory(
         ? fullTurns[i - 1].text.toLowerCase()
         : '';
 
-      // Check affirmative responses to previous questions
-      if (prevAgentText.includes('couple of minutes') || prevAgentText.includes('calling regarding your application') || prevAgentText.includes('am i speaking with')) {
-        if (text.includes('yes') || text.includes('sure') || text.includes('haan') || text.includes('speaking') || text.includes('okay') || text.includes('bol raha')) {
+      // Check affirmative responses
+      if (prevAgentText.includes('couple of minutes') || prevAgentText.includes('good time') || prevAgentText.includes('calling regarding your application') || prevAgentText.includes('am i speaking with') || prevAgentText.includes('initial screening')) {
+        if (text.includes('yes') || text.includes('sure') || text.includes('haan') || text.includes('speaking') || text.includes('okay') || text.includes('bol raha') || text.includes('go ahead')) {
           identityConfirmed = true;
           interestConfirmed = true;
         }
       }
-      if (prevAgentText.includes('considered for the') || prevAgentText.includes('position, correct')) {
+      if (prevAgentText.includes('considered for the') || prevAgentText.includes('position, correct') || prevAgentText.includes('applied for')) {
         if (text.includes('yes') || text.includes('correct') || text.includes('right') || text.includes('ha') || text.includes('haan') || text.includes('sure')) {
           roleConfirmed = true;
         }
       }
 
+      // Check Education (Degree, College, Year)
+      const degreeMatches = ['b.tech', 'btech', 'b.e', 'be', 'mca', 'bca', 'm.tech', 'mtech', 'mba', 'b.com', 'bcom', 'bba', 'b.sc', 'bsc', 'computer science', 'information technology', 'mechanical', 'electronics', 'graduate', 'post graduate'];
+      for (const deg of degreeMatches) {
+        if (text.includes(deg)) {
+          educationDegree = deg.toUpperCase();
+          educationDetails = turn.text.trim();
+          break;
+        }
+      }
+      const collegeMatches = ['iit', 'dtu', 'nsut', 'du', 'delhi university', 'amity', 'ipu', 'thapar', 'bits', 'manipal', 'galgotias', 'srm', 'vit', 'sharda', 'maharshi dayanand', 'mdu', 'aktu'];
+      for (const col of collegeMatches) {
+        if (text.includes(col)) {
+          educationCollege = col.toUpperCase();
+          educationDetails = turn.text.trim();
+          break;
+        }
+      }
+      const yearMatch = text.match(/\b(201[5-9]|202[0-9])\b/);
+      if (yearMatch) {
+        graduationYear = yearMatch[1];
+      }
+      if (prevAgentText.includes('education') || prevAgentText.includes('degree') || prevAgentText.includes('college') || prevAgentText.includes('graduation')) {
+        if (text.length > 2) {
+          educationDetails = turn.text.trim();
+        }
+      }
+
+      // Check Tech Projects
+      if (prevAgentText.includes('project') || prevAgentText.includes('built') || prevAgentText.includes('developed')) {
+        if (text.length > 5) {
+          techProjects = turn.text.trim();
+        }
+      }
+      if (text.includes('built a') || text.includes('developed a') || text.includes('created a') || text.includes('portfolio') || text.includes('crm') || text.includes('voice bot') || text.includes('website') || text.includes('web app')) {
+        techProjects = turn.text.trim();
+      }
+
+      // Check Programming Languages & Tech Stack
+      const langMatches = ['react', 'node', 'javascript', 'typescript', 'python', 'fastapi', 'java', 'c++', 'sql', 'postgresql', 'mongodb', 'tailwind', 'express', 'html', 'css', 'docker', 'aws', 'next.js', 'django', 'flask', 'pytorch'];
+      const matchedLangs: string[] = [];
+      for (const lang of langMatches) {
+        if (text.includes(lang)) {
+          matchedLangs.push(lang.charAt(0).toUpperCase() + lang.slice(1));
+        }
+      }
+      if (matchedLangs.length > 0) {
+        programmingLanguages = matchedLangs.join(', ');
+      } else if (prevAgentText.includes('programming language') || prevAgentText.includes('tech stack') || prevAgentText.includes('languages and tools') || prevAgentText.includes('languages used')) {
+        if (text.length > 2) {
+          programmingLanguages = turn.text.trim();
+        }
+      }
+
       // Check company
-      const companyMatches = ['dlf', 'm3m', 'square yards', 'anarock', 'godrej', 'emaar', 'sobha', 'proptiger', 'signature global', 'adani', 'trump tower', 'central park', 'abc realty'];
+      const companyMatches = ['dlf', 'm3m', 'square yards', 'anarock', 'godrej', 'emaar', 'sobha', 'proptiger', 'signature global', 'adani', 'trump tower', 'central park', 'abc realty', 'tcs', 'infosys', 'wipro', 'hcl', 'cognizant', 'freelance'];
       for (const comp of companyMatches) {
         if (text.includes(comp)) {
           currentCompany = comp.toUpperCase();
           break;
         }
       }
-      if (!currentCompany && (prevAgentText.includes('company') || prevAgentText.includes('working currently') || prevAgentText.includes('which real estate company'))) {
+      if (!currentCompany && (prevAgentText.includes('company') || prevAgentText.includes('working currently') || prevAgentText.includes('which real estate company') || prevAgentText.includes('current organization'))) {
         if (text.length >= 2 && text.length < 50 && !text.includes('?')) {
           currentCompany = turn.text.trim();
         }
       }
 
       // Check designation
-      const desigMatches = ['senior consultant', 'property consultant', 'sales manager', 'team lead', 'associate', 'director', 'manager', 'consultant', 'executive'];
+      const desigMatches = ['senior consultant', 'property consultant', 'sales manager', 'team lead', 'associate', 'director', 'manager', 'consultant', 'executive', 'developer', 'engineer', 'intern', 'fresher'];
       for (const d of desigMatches) {
         if (text.includes(d)) {
           designation = d.split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -414,6 +404,8 @@ export function buildConversationStateInventory(
       const expMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:years?|yrs?)/);
       if (expMatch) {
         experienceYears = parseFloat(expMatch[1]);
+      } else if (text.includes('fresher') || text.includes('0 years') || text.includes('final year')) {
+        experienceYears = 0;
       } else if (prevAgentText.includes('experience') || prevAgentText.includes('how many years')) {
         const numOnly = text.match(/\b(\d+(?:\.\d+)?)\b/);
         if (numOnly) {
@@ -430,53 +422,55 @@ export function buildConversationStateInventory(
         };
       }
 
-      // Check salary / CTC
-      const salMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:lpa|lakh|lakhs|lac|lacs)/);
+      // Check salary / CTC / Stipend
+      const salMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:lpa|lakh|lakhs|lac|lacs|k|thousand|\/month)/);
       if (salMatch) {
-        currentSalaryLPA = `${salMatch[1]} LPA`;
+        currentSalaryLPA = `${turn.text.trim()}`;
       } else if (text.includes('confidential') || text.includes('not disclose') || text.includes('prefer not to say')) {
         salaryDeclined = true;
         currentSalaryLPA = 'Confidential';
-      } else if (prevAgentText.includes('compensation') || prevAgentText.includes('ctc') || prevAgentText.includes('salary')) {
+      } else if (prevAgentText.includes('compensation') || prevAgentText.includes('ctc') || prevAgentText.includes('salary') || prevAgentText.includes('stipend')) {
         if (text.length > 1 && text.length < 40) {
           currentSalaryLPA = turn.text.trim();
         }
       }
 
       // Check notice period
-      const noticeMatch = text.match(/(\d+)\s*(?:days?|din)/);
+      const noticeMatch = text.match(/(\d+)\s*(?:days?|din|months?)/);
       if (noticeMatch) {
         noticePeriodDays = parseInt(noticeMatch[1], 10);
-      } else if (text.includes('immediate') || text.includes('turant') || text.includes('serving notice')) {
+      } else if (text.includes('immediate') || text.includes('turant') || text.includes('serving notice') || text.includes('can join immediately')) {
         noticePeriodDays = 0;
-      } else if (prevAgentText.includes('notice period')) {
+      } else if (prevAgentText.includes('notice period') || prevAgentText.includes('joining date')) {
         const numMatch = text.match(/\b(\d+)\b/);
         if (numMatch) {
           noticePeriodDays = parseInt(numMatch[1], 10);
         }
       }
 
-      // Check location
-      if (text.includes('gurgaon') || text.includes('gurugram')) {
+      // Check location & Work from office
+      if (text.includes('gurgaon') || text.includes('gurugram') || text.includes('sector 67') || text.includes('m3m')) {
         currentLocation = 'Gurugram';
+        workFromOfficeAgreed = true;
       } else if (text.includes('delhi')) {
         currentLocation = 'Delhi';
       } else if (text.includes('noida')) {
         currentLocation = 'Noida';
-      } else if (prevAgentText.includes('based in ncr') || prevAgentText.includes('where are you based') || prevAgentText.includes('current location')) {
-        if (text.length > 2 && text.length < 40) {
-          currentLocation = turn.text.trim();
+      }
+      if (prevAgentText.includes('m3m urbana') || prevAgentText.includes('sector 67') || prevAgentText.includes('on-site') || prevAgentText.includes('in-office')) {
+        if (text.includes('yes') || text.includes('sure') || text.includes('comfortable') || text.includes('can travel') || text.includes('fine') || text.includes('haan')) {
+          workFromOfficeAgreed = true;
         }
       }
 
       // Check role specific question answered
-      if (prevAgentText.includes('channel partners') || prevAgentText.includes('luxury residential') || prevAgentText.includes('hni') || prevAgentText.includes('closing') || prevAgentText.includes('target')) {
+      if (prevAgentText.includes('programming languages') || prevAgentText.includes('frameworks') || prevAgentText.includes('channel partners') || prevAgentText.includes('luxury residential') || prevAgentText.includes('closing') || prevAgentText.includes('target')) {
         roleSpecificAnswered = true;
       }
 
       // Check interview scheduling confirmed
       if (text.includes('tomorrow') || text.includes('kal') || text.includes('friday') || text.includes('2:30') || text.includes('4:30') || text.includes('slot-2') || text.includes('slot-3') || text.includes('works great') || text.includes('perfect') || text.includes('confirm')) {
-        if (prevAgentText.includes('interview') || prevAgentText.includes('m3m urbana') || prevAgentText.includes('which slot')) {
+        if (prevAgentText.includes('interview') || prevAgentText.includes('m3m urbana') || prevAgentText.includes('which slot') || prevAgentText.includes('available')) {
           interviewScheduled = true;
         }
       }
@@ -487,34 +481,54 @@ export function buildConversationStateInventory(
   const knownList: string[] = [];
   const missingList: string[] = [];
 
-  if (currentCompany) {
-    knownList.push(`Current Company: "${currentCompany}"`);
+  if (educationDetails || educationDegree) {
+    knownList.push(`Education: "${educationDegree || educationDetails} ${graduationYear ? `(${graduationYear})` : ''}"`);
   } else {
-    missingList.push('Current Company');
+    missingList.push('Education (Degree, College, Year of Graduation)');
   }
 
-  if (designation) {
-    knownList.push(`Designation: "${designation}"`);
-  } else {
-    missingList.push('Designation');
-  }
+  if (isTechRole) {
+    if (techProjects) {
+      knownList.push(`Tech Projects: "${techProjects.slice(0, 40)}..."`);
+    } else {
+      missingList.push('Tech Projects Built');
+    }
 
-  if (experienceYears !== null) {
-    knownList.push(`Real Estate Experience: "${experienceYears} years"`);
+    if (programmingLanguages) {
+      knownList.push(`Languages & Tech Stack: "${programmingLanguages}"`);
+    } else {
+      missingList.push('Programming Languages Used');
+    }
   } else {
-    missingList.push('Total / Real Estate Experience');
-  }
+    if (currentCompany) {
+      knownList.push(`Current Company: "${currentCompany}"`);
+    } else {
+      missingList.push('Current Organization');
+    }
 
-  if (gurgaonDubaiExposure) {
-    knownList.push(`Market Exposure: ${gurgaonDubaiExposure.gurgaon ? 'Gurgaon' : ''} ${gurgaonDubaiExposure.dubai ? 'Dubai' : ''}`);
-  } else {
-    missingList.push('Gurgaon / Dubai Market Familiarity');
+    if (designation) {
+      knownList.push(`Designation: "${designation}"`);
+    } else {
+      missingList.push('Designation');
+    }
+
+    if (experienceYears !== null) {
+      knownList.push(`Experience: "${experienceYears} years"`);
+    } else {
+      missingList.push('Total Experience');
+    }
+
+    if (gurgaonDubaiExposure) {
+      knownList.push(`Market Exposure: ${gurgaonDubaiExposure.gurgaon ? 'Gurgaon' : ''} ${gurgaonDubaiExposure.dubai ? 'Dubai' : ''}`);
+    } else {
+      missingList.push('Gurgaon / Dubai Territory Familiarity');
+    }
   }
 
   if (currentSalaryLPA || salaryDeclined) {
     knownList.push(`Compensation: "${currentSalaryLPA || 'Not disclosed'}"`);
   } else {
-    missingList.push('Current & Expected Salary (CTC)');
+    missingList.push(isInternship ? 'Stipend Expectation' : 'Current & Expected CTC');
   }
 
   if (noticePeriodDays !== null) {
@@ -523,16 +537,10 @@ export function buildConversationStateInventory(
     missingList.push('Notice Period & Earliest Joining');
   }
 
-  if (currentLocation) {
-    knownList.push(`Location: "${currentLocation}"`);
+  if (workFromOfficeAgreed) {
+    knownList.push('WFO M3M Urbana Sector 67: Confirmed');
   } else {
-    missingList.push('Current NCR Location');
-  }
-
-  if (roleSpecificAnswered) {
-    knownList.push('Role Specific Question: Answered');
-  } else {
-    missingList.push('Role Specific Domain Question');
+    missingList.push('Work From Office (Sector 67 Gurugram HQ)');
   }
 
   // Determine next required field in sequence (Strict Anti-Repetition Rule: NEVER ASK TWICE)
@@ -543,20 +551,26 @@ export function buildConversationStateInventory(
     nextRequiredField = 'interest';
   } else if (!roleConfirmed) {
     nextRequiredField = 'role_verification';
-  } else if (!currentCompany) {
+  } else if (!educationDetails && !educationDegree) {
+    nextRequiredField = 'education';
+  } else if (isTechRole && !techProjects) {
+    nextRequiredField = 'tech_projects';
+  } else if (isTechRole && !programmingLanguages) {
+    nextRequiredField = 'tech_languages';
+  } else if (!isTechRole && !currentCompany) {
     nextRequiredField = 'company';
-  } else if (!designation) {
+  } else if (!isTechRole && !designation) {
     nextRequiredField = 'designation';
-  } else if (experienceYears === null) {
+  } else if (!isTechRole && experienceYears === null) {
     nextRequiredField = 'experience';
-  } else if (!gurgaonDubaiExposure) {
+  } else if (!isTechRole && !gurgaonDubaiExposure) {
     nextRequiredField = 'market_exposure';
   } else if (!currentSalaryLPA && !salaryDeclined) {
     nextRequiredField = 'salary';
   } else if (noticePeriodDays === null) {
     nextRequiredField = 'notice_period';
-  } else if (!currentLocation) {
-    nextRequiredField = 'location';
+  } else if (!workFromOfficeAgreed) {
+    nextRequiredField = 'work_from_office';
   } else if (!roleSpecificAnswered) {
     nextRequiredField = 'role_specific';
   } else if (!interviewScheduled) {
@@ -569,6 +583,14 @@ export function buildConversationStateInventory(
     identityConfirmed,
     interestConfirmed,
     roleConfirmed,
+    educationDetails,
+    educationDegree,
+    educationCollege,
+    graduationYear,
+    isTechRole,
+    isInternship,
+    techProjects,
+    programmingLanguages,
     currentCompany,
     designation,
     experienceYears,
@@ -578,6 +600,7 @@ export function buildConversationStateInventory(
     salaryDeclined,
     currentLocation,
     noticePeriodDays,
+    workFromOfficeAgreed,
     roleSpecificAnswered,
     interviewScheduled,
     knownList,
@@ -1196,7 +1219,7 @@ function computeRawFallbackResponse(
   ) {
     if (lower.includes('open') || lower.includes('explore') || lower.includes('lpa') || lower.includes('kitna')) {
       return {
-        agentReply: `That is great! For our ${candRole} desk, White Collar Realty offers a budget of ${roleInfo.fixedBudget}, plus uncapped quarterly incentives where top closers make ${roleInfo.totalOte} across Gurgaon luxury and Dubai properties. We can arrange a confidential, direct discussion with our Sales Director at our Sector 67 HQ. Would ${availableSlotList ? availableSlotList.split(',')[0] : 'Tomorrow at 2:30 PM'} work for a quick conversation?`,
+        agentReply: `That is great! For our ${candRole} desk, White Collar Realty offers a budget of ${roleInfo.budgetBand}, plus uncapped quarterly incentives where top closers make ${roleInfo.oteBand} across Gurgaon luxury and Dubai properties. We can arrange a confidential, direct discussion with our Sales Director at our Sector 67 HQ. Would ${availableSlotList ? availableSlotList.split(',')[0] : 'Tomorrow at 2:30 PM'} work for a quick conversation?`,
         detectedIntent: 'reschedule',
         hrDecisionOutcome: 'INTERVIEW_ELIGIBLE',
         extractedFields: {
@@ -1204,7 +1227,7 @@ function computeRawFallbackResponse(
         },
         statusRecommendation: 'Screened - Ready for Interview',
         generatedRemark: {
-          text: `Candidate recently joined another firm, but is open to evaluating White Collar Realty counter-offer. Target role budget pitch (${roleInfo.fixedBudget}) shared. Ready for leadership discussion.`,
+          text: `Candidate recently joined another firm, but is open to evaluating White Collar Realty counter-offer. Target role budget pitch (${roleInfo.budgetBand}) shared. Ready for leadership discussion.`,
           priority: 'High',
           category: 'Already Joined - Counter Offer Open',
           actionDueDate: 'Today',
@@ -1213,7 +1236,7 @@ function computeRawFallbackResponse(
     }
 
     return {
-      agentReply: `Congratulations on your new role! At White Collar Realty, our approved budget for ${candRole} is ${roleInfo.fixedBudget} plus industry-leading uncapped deal commissions. Would you be open to an exploratory 15-minute confidential discussion with our Director at our Sector 67 M3M Urbana office, or would you prefer we stay in touch for a 3-month check-in?`,
+      agentReply: `Congratulations on your new role! At White Collar Realty, our approved budget for ${candRole} is ${roleInfo.budgetBand} plus industry-leading uncapped deal commissions. Would you be open to an exploratory 15-minute confidential discussion with our Director at our Sector 67 M3M Urbana office, or would you prefer we stay in touch for a 3-month check-in?`,
       detectedIntent: 'already_joined_negotiation',
       hrDecisionOutcome: 'INTERVIEW_ELIGIBLE',
       extractedFields: {
@@ -1221,7 +1244,7 @@ function computeRawFallbackResponse(
       },
       statusRecommendation: 'Screened - Ready for Interview',
       generatedRemark: {
-        text: `Candidate mentioned having joined another company. Auto-engaged with company requirements & role budget pitch (${roleInfo.fixedBudget} + incentives).`,
+        text: `Candidate mentioned having joined another company. Auto-engaged with company requirements & role budget pitch (${roleInfo.budgetBand} + incentives).`,
         priority: 'High',
         category: 'Already Joined - Counter Offer Open',
         actionDueDate: 'Today',
@@ -1400,6 +1423,63 @@ function computeRawFallbackResponse(
     };
   }
 
+  // If education is missing
+  if (state.nextRequiredField === 'education') {
+    const isTech = roleInfo.isTechRole || roleInfo.isInternship;
+    return {
+      agentReply: isTech
+        ? `Could you share your educational background—which degree, college or university, and your graduation year?`
+        : `Could you share your highest educational qualification and graduation year?`,
+      detectedIntent: 'education_screening',
+      extractedFields: {},
+      statusRecommendation: 'Screening Pending',
+      generatedRemark: {
+        text: `Screening educational background for ${candRole}.`,
+        priority: 'Medium',
+        category: 'Education Screening',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
+  // If tech projects are missing (Tech / Tech Intern roles)
+  if (state.nextRequiredField === 'tech_projects') {
+    return {
+      agentReply: `Can you tell me about the key projects you have built recently and what problems they solved?`,
+      detectedIntent: 'tech_projects_screening',
+      extractedFields: {
+        educationDegree: state.educationDegree || undefined,
+        educationCollege: state.educationCollege || undefined,
+        graduationYear: state.graduationYear || undefined,
+      },
+      statusRecommendation: 'Screening Pending',
+      generatedRemark: {
+        text: `Inquiring key projects built and problem domain.`,
+        priority: 'High',
+        category: 'Technical Screening',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
+  // If programming languages and tech stack are missing (Tech / Tech Intern roles)
+  if (state.nextRequiredField === 'tech_languages') {
+    return {
+      agentReply: `What programming languages, frameworks, or databases did you use to build those projects?`,
+      detectedIntent: 'tech_languages_screening',
+      extractedFields: {
+        techProjectsSummary: state.techProjects || undefined,
+      },
+      statusRecommendation: 'Screening Pending',
+      generatedRemark: {
+        text: `Inquiring programming languages & tech stack used.`,
+        priority: 'High',
+        category: 'Technical Screening',
+        actionDueDate: 'Today',
+      },
+    };
+  }
+
   // If current company is missing (and not in CRM profile)
   if (state.nextRequiredField === 'company') {
     return {
@@ -1419,7 +1499,7 @@ function computeRawFallbackResponse(
   // If designation is missing
   if (state.nextRequiredField === 'designation') {
     return {
-      agentReply: `Understood. And what is your current designation there?`,
+      agentReply: `Got it. And what is your current designation there?`,
       detectedIntent: 'screening_question',
       extractedFields: {
         currentCompany: state.currentCompany || undefined,
@@ -1471,17 +1551,21 @@ function computeRawFallbackResponse(
     };
   }
 
-  // If salary / compensation is missing
+  // If salary / compensation / stipend is missing
   if (state.nextRequiredField === 'salary') {
+    const isIntern = roleInfo.isInternship;
     return {
-      agentReply: `Makes sense. Could you share your current compensation and what you are expecting for your next move?`,
+      agentReply: isIntern
+        ? `What is your expected monthly stipend for this internship?`
+        : `Could you share your current compensation and what you are expecting for your next move?`,
       detectedIntent: 'screening_question',
       extractedFields: {
         gurgaonDubaiExperience: state.gurgaonDubaiExposure || undefined,
+        programmingLanguages: state.programmingLanguages ? state.programmingLanguages.split(', ') : undefined,
       },
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Inquiring current & expected CTC per Rule 20.`,
+        text: `Inquiring compensation / stipend expectations.`,
         priority: 'Medium',
         category: 'Budget Negotiation',
         actionDueDate: 'Today',
@@ -1491,31 +1575,17 @@ function computeRawFallbackResponse(
 
   // If notice period is missing
   if (state.nextRequiredField === 'notice_period') {
-    if (lower.includes('30') && !lower.includes('negotiable') && !lower.includes('earlier')) {
-      return {
-        agentReply: `Understood. Would an earlier joining be possible if selected?`,
-        detectedIntent: 'notice_followup',
-        extractedFields: {
-          noticePeriodDays: 30,
-        },
-        statusRecommendation: 'Screening Pending',
-        generatedRemark: {
-          text: `30 days notice reported. Inquiring early buyout / joining flexibility per Rule 21.`,
-          priority: 'Medium',
-          category: 'Notice Period Evaluation',
-          actionDueDate: 'Today',
-        },
-      };
-    }
     return {
-      agentReply: `Understood. What is your current notice period and earliest joining date?`,
+      agentReply: roleInfo.isInternship
+        ? `Are you available to join immediately for a 3 to 6-month internship?`
+        : `Makes sense. What is your current notice period and earliest joining date?`,
       detectedIntent: 'screening_question',
       extractedFields: {
         currentSalaryLPA: state.currentSalaryLPA || undefined,
       },
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Inquiring notice period feasibility per Rule 21.`,
+        text: `Inquiring joining availability and notice period.`,
         priority: 'Medium',
         category: 'Notice Period Evaluation',
         actionDueDate: 'Today',
@@ -1523,18 +1593,18 @@ function computeRawFallbackResponse(
     };
   }
 
-  // If location is missing
-  if (state.nextRequiredField === 'location') {
+  // If work from office at M3M Urbana Sector 67 is not confirmed
+  if (state.nextRequiredField === 'work_from_office') {
     return {
-      agentReply: `And where are you currently based in NCR?`,
-      detectedIntent: 'screening_question',
+      agentReply: `Our office is located on the 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram. Are you comfortable with working on-site from our Gurugram office?`,
+      detectedIntent: 'location_wfo_screening',
       extractedFields: {
         noticePeriodDays: state.noticePeriodDays !== null ? state.noticePeriodDays : undefined,
       },
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Confirming NCR residential location and commute feasibility.`,
-        priority: 'Low',
+        text: `Verifying on-site work from office at Sector 67 Gurugram HQ.`,
+        priority: 'High',
         category: 'Location Assessment',
         actionDueDate: 'Today',
       },
@@ -1543,12 +1613,13 @@ function computeRawFallbackResponse(
 
   // If role specific question is missing
   if (state.nextRequiredField === 'role_specific') {
-    const roleQ = roleInfo.roleSpecificQuestions[0] || 'What has been your primary approach to driving luxury deal closures in Gurgaon?';
+    const roleQ = roleInfo.roleSpecificQuestions?.[0] || 'Can you highlight your primary strength that makes you a great fit for this position?';
     return {
       agentReply: `Right. ${roleQ}`,
       detectedIntent: 'role_specific_question',
       extractedFields: {
         currentLocation: state.currentLocation || undefined,
+        workFromOfficeAgreed: true,
       },
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
@@ -1562,16 +1633,17 @@ function computeRawFallbackResponse(
 
   // Final screening round: Propose face-to-face interview slots (Rule 22)
   return {
-    agentReply: `Thank you for sharing those details! Based on your background, we would like to invite you for a face-to-face interview at our corporate office: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram. We have slots available on ${availableSlotList || 'Tomorrow at 2:30 PM or 4:30 PM'}. Which slot works best for you?`,
+    agentReply: `Thank you for sharing those details! Based on your profile, we would like to invite you for a face-to-face interview at our corporate office: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram. We have slots available on ${availableSlotList || 'Tomorrow at 2:30 PM or 4:30 PM'}. Which slot works best for you?`,
     detectedIntent: 'screening_answer',
     hrDecisionOutcome: 'INTERVIEW_ELIGIBLE',
     extractedFields: {
       currentLocation: state.currentLocation || userMessage,
+      workFromOfficeAgreed: true,
       noticePeriodDays: state.noticePeriodDays !== null ? state.noticePeriodDays : (lower.includes('immediate') ? 0 : lower.includes('15') ? 15 : 30),
     },
     statusRecommendation: 'Screened - Ready for Interview',
     generatedRemark: {
-      text: `All screening criteria validated. Proposed face-to-face interview slots at Sector 67 HQ per Rule 22.`,
+      text: `All screening criteria validated. Proposed face-to-face interview slots at Sector 67 HQ.`,
       priority: 'High',
       category: 'Interview Scheduled',
       actionDueDate: 'Tomorrow',
@@ -1579,7 +1651,7 @@ function computeRawFallbackResponse(
   };
 }
 
-function generateFallbackResponse(
+export function generateFallbackResponse(
   scenario: string,
   userMessage: string,
   candidate: any,
@@ -1591,7 +1663,7 @@ function generateFallbackResponse(
 }
 
 // Shared prompt builder for White Collar Realty Virtual HR Recruiter
-function createSystemInstruction(
+export function createSystemInstruction(
   candidate: any,
   scenario: string,
   availableSlotsText: string,
@@ -1616,145 +1688,118 @@ TARGET FIELD FOR NEXT QUESTION: [${stateInventory.nextRequiredField}]
   return `
 # WHITE COLLAR REALTY — NATURAL VOICE HR ASSISTANT ("ARJUN")
 
-You are the AI Voice HR Assistant for White Collar Realty, a premier luxury real estate advisory firm in Gurgaon and Dubai.
+You are Arjun, Senior Talent Acquisition Recruiter for White Collar Realty, a premier luxury real estate advisory firm in Gurgaon and Dubai.
 Office HQ: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101.
 
-Your conversation style must feel like talking to a highly natural, intelligent human voice assistant such as Google Assistant or a professional human HR recruiter.
+Your conversation style must feel like talking to a warm, sharp, energetic, and highly professional human HR recruiter.
 You are NOT a questionnaire bot.
 You are NOT a script reader.
-You are NOT a text-to-speech system that simply reads predefined sentences.
-Your job is to have a REAL-TIME, NATURAL, TWO-WAY VOICE CONVERSATION.
+You are NOT a mechanical form processor.
+Your job is to have a REAL-TIME, NATURAL, TWO-WAY CONVERSATIONAL VOICE SCREENING.
 
 ${inventorySummary}
 
 ---
 
-## 1. CORE PRINCIPLE
-LISTEN → UNDERSTAND → THINK → RESPOND → LISTEN AGAIN
-Never: ASK → WAIT FIXED TIME → READ NEXT QUESTION.
-You must decide dynamically what to say next based on what the candidate just said.
+## 1. CORE CONVERSATION PRINCIPLE
+LISTEN → ABSORB CONTEXT → THINK DEEPLY → RESPOND NATURALLY → PROBE WITH CONTEXT-AWARE FOLLOW-UP → LISTEN AGAIN.
+Never: ASK → WAIT FIXED TIME → READ DISCONNECTED QUESTION.
+You must adapt dynamically based on what the candidate just shared.
 
 ---
 
-## 2. SPEAK LIKE A HUMAN (GOOGLE ASSISTANT / ALEXA STYLE)
-- Use short, natural sentences. Do NOT speak in long paragraphs.
-- STRICT Spoken Length Rule: 1 or 2 spoken sentences maximum per turn. Treat this as a real live phone call.
-- Instead of: "Thank you for providing the information regarding your professional experience. I would now like to ask you about your current organization."
-- Say: "Got it. And where are you working right now?"
-- Use natural conversational words: "Okay.", "Right.", "Got it.", "Sure.", "Yeah.", "Understood.", "That's helpful.", "Makes sense." (Do NOT overuse them, vary speech naturally).
+## 2. STRICT PROHIBITION: BANNED ROBOTIC FILLERS & MECHANICAL PATTERNS (CRITICAL)
+- **EXPLICITLY BANNED WORDS & PHRASES (NEVER USE UNDER ANY CIRCUMSTANCES):**
+  - ❌ "Understood" / "Understood."
+  - ❌ "Proceeding" / "Proceeding to..." / "Proceeding with..."
+  - ❌ "Acknowledged" / "Copy that" / "Affirmative" / "Processing"
+  - ❌ "Please provide the following information"
+  - ❌ "Your response has been recorded"
+  - ❌ "Moving to question number..." / "Question 1", "Question 2"
+  - ❌ "Thank you for providing the details regarding..."
+
+- **USE NATURAL, WARM HUMAN CONVERSATIONAL PHRASES INSTEAD:**
+  - ✅ "Got it." / "Got that."
+  - ✅ "That sounds great!" / "Nice."
+  - ✅ "Makes sense." / "Fair enough."
+  - ✅ "That's interesting!" / "That's really helpful context."
+  - ✅ "Sure thing." / "Right." / "Okay."
+  - ✅ Or transition directly into your follow-up with zero unnecessary boilerplate!
 
 ---
 
-## 3. NEVER SOUND ROBOTIC
-- Never say: "Question number one...", "Question number two...", "Please provide the following information...", "Thank you for your valuable response...", "Your response has been recorded...".
+## 3. PRIORITIZE CONTEXT-AWARE FOLLOW-UP QUESTIONS (ESSENTIAL)
+- Always react directly to the specific detail the candidate just mentioned before asking the next question:
+  - If a candidate says: *"I handled sales at DLF Phase 5 and Golf Course Extension."*
+    - DO NOT mechanically jump to salary or notice period!
+    - DO say: *"That's solid Gurgaon territory exposure! Were those mostly high-ticket 4BHKs and penthouses, or commercial retail units?"*
+  - If a tech candidate says: *"I built a real-time tracking application using React and Python FastAPI."*
+    - DO NOT ask a generic unrelated question!
+    - DO say: *"Nice project! What database did you pair with FastAPI, and how did you handle state synchronization?"*
+  - If a candidate says: *"I have 5 years in real estate but I recently joined another firm 2 months ago."*
+    - DO say: *"Congratulations on the new role! How has the experience been so far, and would you be open to hearing about our senior portfolio at M3M Urbana?"*
 
 ---
 
-## 4. ONE THOUGHT AT A TIME
-- Never ask multiple questions in one sentence.
-- Bad: "What's your current company, designation, salary, notice period and expected salary?"
-- Good: "Where are you working currently?" (Listen) → "And what's your designation there?" (Listen).
+## 4. SPOKEN LENGTH & HUMAN PACING RULE
+- STRICT Spoken Length: 1 or 2 crisp, natural spoken sentences maximum per turn.
+- Treat this as an authentic live phone call. Keep replies brief, punchy, and conversational so the candidate can speak.
+- One thought at a time: never bundle multiple questions together.
 
 ---
 
-## 5. DYNAMIC CONVERSATION (NOT A FIXED QUESTION ORDER)
-- Do not follow a rigid order. Change order naturally depending on the conversation.
-- Example:
-  Candidate: "I've worked in Dubai real estate for three years."
-  AI: "Oh, that's interesting! Were those mainly ready-to-move properties or off-plan projects?"
-  Candidate: "Mostly off-plan."
-  AI: "Got it. And were you dealing directly with buyers, or mainly channel partners?"
+## 5. SALARY & COMPENSATION DISCRETION & PRIVACY
+- Keep White Collar Realty internal hiring budget bands confidential.
+- Politely and casually inquire about their current compensation package and expectation:
+  - For lateral hires: *"Could you share what compensation structure you're currently drawing and what you're expecting for your next move?"*
+  - For interns: *"What monthly stipend are you targeting for this 3 to 6-month internship?"*
 
 ---
 
-## 6. UNDERSTAND COMPLETE SENTENCES
-- If candidate provides multiple pieces in one turn:
-  Candidate: "I'm currently working with ABC Realty, it's been around four years, but before that I was in Dubai for two years."
-  AI must understand: Current company: ABC Realty, Experience: 4 years, Dubai experience: Yes (2 years).
-  DO NOT ask: "How many years of experience do you have?" or "What is your current company?".
-  Ask what is still missing: "Got it, four years with ABC Realty and two years in Dubai. What kind of properties were you handling there?"
-
----
-
-## 7. NEVER ASK THE SAME QUESTION TWICE & MAINTAIN MEMORY
+## 6. NEVER ASK THE SAME QUESTION TWICE & MAINTAIN ACTIVE MEMORY
 - Once the candidate has clearly answered a question, NEVER ask that same question again.
-- Treat the candidate's answer as FINAL unless the candidate explicitly corrects or changes it.
-- Before asking any question, check the conversation history and confirm that this information has not already been collected.
-- Do NOT repeat a question simply because the answer was short or brief (e.g. "Residential", "DLF", "3 years", "12 LPA"). Acknowledge and advance to the next uncollected item.
+- Treat the candidate's answer as FINAL unless they explicitly correct or update it.
 - Check the ALREADY COLLECTED ON FILE section above before generating your response. Do not ask for any item marked with ✓.
 
 ---
 
-## 8. INTERRUPTION / BARGE-IN
-- If candidate starts speaking while you speak: STOP speaking immediately. Listen to what candidate said and respond directly.
+## 7. INTERRUPTION / BARGE-IN & CANDIDATE PAUSES
+- If candidate speaks while you speak: STOP immediately and address what they said.
+- If candidate pauses or asks for a moment: "Sure, take your time." Maintain respectful silence until they are ready.
+- If candidate confirms presence ("Yes", "I'm here", "Haan"): respond gently: "Great, please take your time, I'm listening." NEVER re-ask or repeat the previous question.
 
 ---
 
-## 9. NATURAL PAUSES & CANDIDATE SILENCE (CRITICAL DIRECTIVE)
-- When candidate takes time to speak: NEVER repeat previous questions.
-- Wait at least 30 seconds before asking "Are you there?" or "No problem, whenever you're ready," instead of repeating previous questions.
-- Allow the candidate space to think without rushing them.
-- If candidate says "yes", "I'm here", "haan", "sun raha hoon", or confirms presence: respond gently: "Great, please take your time, I'm listening." NEVER re-ask or repeat the previous question.
-- Maintain natural, courteous conversational pacing at all times.
+## 8. CANDIDATE QUESTIONS — QUICK REPLIES (WHITE COLLAR REALTY FAQ):
+- Office Location: "Our office is on the 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram. Coming back to your background, what is your notice period?"
+- About Company: "White Collar Realty is a luxury real estate advisory firm partnering with top developers like DLF, M3M, Godrej, Emaar, and Sobha across Gurgaon and Dubai. How familiar are you with luxury properties?"
+- Timings / Working Days: "Our office timings are 10:00 AM to 6:30 PM, six days a week with Tuesday off, as weekends are prime site visit days. Does that schedule suit you?"
+- Interview Process: "There are two rounds: this introductory HR screening, followed by a face-to-face discussion with our Director at our Sector 67 HQ. Are you available this week?"
+- Leads Support: "Yes, White Collar Realty provides verified high-intent CRM leads and marketing campaigns, alongside supporting your personal HNI network."
+- Travel / Conveyance: "We provide dedicated conveyance and allowances for all scheduled client site visits across Gurgaon."
 
 ---
 
-## 10. ACTIVE LISTENING
-- React to meaningful information: "Okay, so you already have strong Gurgaon market exposure. What kind of projects have you mainly worked on?"
-
----
-
-## 11. HANDLE CORRECTIONS
-- Candidate: "No, sorry, I meant four years, not five."
-- AI: "No problem, four years. Got it." Update memory without arguing.
-
----
-
-## 12. HANDLE "WAIT"
-- Candidate: "Wait, let me check."
-- AI: "Sure, take your time." Then remain silent.
-
----
-
-## 13. HANDLE "I DON'T KNOW"
-- Candidate: "I'm not sure about that."
-- AI: "That's okay." Ask simpler question or move to next topic.
-
----
-
-## 14. HANDLE CANDIDATE QUESTIONS (ANSWER NATURALLY & RETURN TO FLOW)
-- Candidate asks Office Location: "Our office is on the 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram. Coming back to your profile, what's your notice period?"
-- Candidate asks About Company: "White Collar Realty is a luxury real estate advisory firm partnering with top developers like DLF, M3M, Godrej, Emaar, and Sobha in Gurgaon and Dubai. How familiar are you with luxury properties?"
-- Candidate asks Timings / Working Days: "Our office timings are 10:00 AM to 6:30 PM, six days a week with Tuesday off, as weekends are key client site visit days. Does that schedule suit you?"
-- Candidate asks Interview Process: "There are two rounds: this preliminary HR screening, followed by a face-to-face discussion with our Director at Sector 67. Are you available this week?"
-- Candidate asks Leads Support: "Yes, White Collar Realty provides verified high-intent CRM leads and marketing support, alongside encouraging active personal HNI networking."
-- Candidate asks Travel / Cab: "We provide conveyance and travel allowances for all client site visits. Our office is also close to Sector 55-56 Rapid Metro."
-
----
-
-## 15. HANDLE OFF-TOPIC TALK
-- Candidate: "I moved to Gurgaon last year because my family shifted here."
-- AI: "Okay, that makes sense. Since you're now based in Gurgaon, how familiar are you with the local property market?"
-
----
-
-## 16. HUMAN-LIKE HINGLISH & AUTOMATIC LANGUAGE ADAPTATION
-- If candidate speaks Hinglish, respond in natural conversational Hinglish.
+## 9. HUMAN-LIKE HINGLISH & AUTOMATIC LANGUAGE ADAPTATION
+- If candidate speaks in Hinglish or Hindi, effortlessly match their tone in natural conversational Hinglish.
 - Example:
-  Candidate: "Main abhi Gurgaon mein hi work kar raha hoon."
-  AI: "Okay, got it. Gurgaon mein aap mainly kis type ke projects handle kar rahe hain?"
-  Candidate: "Residential."
-  AI: "Right. Aur aapka experience mostly end-to-end sales mein hai ya lead generation side bhi handle karte hain?"
+  Candidate: "Main abhi DLF projects pe kaam kar raha hoon Sector 65 mein."
+  AI: "Great! Sector 65 luxury belt mein aapka focus majorly residential 3 and 4 BHKs pe raha hai ya commercial spaces bhi handle kiye hain?"
 
 ---
 
-## 17. ROLE-AWARE SCREENING:
+## 10. ROLE-AWARE 1ST ROUND SCREENING SPECIFICATIONS:
 Target Role Applied: ${roleInfo.title}
+Category: ${roleInfo.category} (${roleInfo.roleType})
+Is Tech Role: ${roleInfo.isTechRole ? 'YES - Conduct Technical & Project Architecture Screening' : 'NO - Real Estate / Sales / Corporate Domain'}
+Is Internship: ${roleInfo.isInternship ? 'YES - Inquire degree, college, pass-out year, projects, languages, and stipend' : 'NO - Experienced lateral hiring'}
 Department: ${roleInfo.department}
 Location: ${roleInfo.location}
-Approved Budget: ${roleInfo.fixedBudget} (Fixed) + ${roleInfo.totalOte} (${roleInfo.seniority})
+Approved Budget: ${roleInfo.budgetBand} (Fixed) + ${roleInfo.oteBand}
+Education Requirement: ${roleInfo.educationRequirement || 'Graduate / Relevant Degree'}
+${roleInfo.techStack && roleInfo.techStack.length > 0 ? `Target Tech Stack: ${roleInfo.techStack.join(', ')}` : ''}
 Notice Period Expectation: ${roleInfo.noticePeriodExpectation}
-Key Responsibilities: ${roleInfo.responsibilities.join('; ')}
+Key Responsibilities: ${roleInfo.keyResponsibilities.join('; ')}
 Required Skills: ${roleInfo.requiredSkills.join(', ')}
 
 Role Specific Inquiries:
@@ -1762,39 +1807,36 @@ ${roleInfo.roleSpecificQuestions.map((q, i) => `${i + 1}. "${q}"`).join('\n')}
 
 ---
 
-## 18. SCREENING DATA CHECKLIST (Collect Naturally Without Announcing):
-1. Candidate Identity & Permission to Speak
-2. Target Role Confirmation
-3. Current Organization & Designation
-4. Total Real Estate Experience (Gurgaon & Dubai exposure)
-5. Current Fixed Salary & Expected CTC
-6. Current Notice Period & Earliest Joining Date
-7. Face-to-Face Interview Availability
+## 11. 1ST SCREENING INTERVIEW FLOW (TOP HUMAN HR RECRUITER):
+1. **Introduction & Permission**: Warm greeting as Arjun from White Collar Realty Gurugram. Confirm identity & role (${roleInfo.title}).
+2. **Education Screening**: Degree, College/University, and Graduation Year (e.g. B.Tech, MCA, MBA).
+3. **Domain & Technical Screening**:
+   - **Tech Role / Intern**: Projects built, problem domain, and programming languages/tech stack (React, Node, Python, SQL, etc.).
+   - **Sales / Real Estate**: Real estate experience, top developer projects (DLF, M3M, Godrej, Emaar, Sobha), and territory closures in Gurgaon/Dubai.
+4. **Compensation / Stipend**: Current & expected CTC / stipend.
+5. **Notice Period & Availability**: Notice period and earliest joining date.
+6. **Office Location & WFO Gurugram**: Confirm on-site work comfort at M3M Urbana Business Park, Sector 67, Gurugram HQ.
+7. **Schedule Face-to-Face Interview**: Lock in a face-to-face round at Sector 67 HQ from open slots.
 
 ---
 
-## 19. AVAILABLE INTERVIEW SLOTS (Only offer these verified slots):
+## 12. AVAILABLE INTERVIEW SLOTS:
 ${availableSlotsText || 'No current slots open; ask candidate for their preferred day and morning/afternoon preference.'}
 
 ---
 
-## 20. SCENARIO SPECIFIC BEHAVIORS:
-- Screening: Verify identity → 2 mins check → Target role → Experience → CTC → Notice → Schedule.
-- Reminder (scenario: reminder): "Hi ${candidate?.name || ''}, I'm calling from White Collar Realty regarding your interview scheduled for tomorrow at ${candidate?.interviewTime || 'the scheduled time'}. I'm just calling to confirm whether you'll be able to attend."
-- Missed Followup (scenario: missed_followup): "Hi ${candidate?.name || ''}, I'm calling regarding your interview scheduled yesterday. We noticed you weren't able to attend. I wanted to check if everything is okay and whether you'd like to reschedule."
-- Busy / Callback: "No problem. Would you prefer that I call you back later?" Set outcome CALL_BACK_REQUESTED.
-- Not Interested: "Understood. Thank you for your time. Have a good day." Set outcome NOT_INTERESTED.
-- Already Joined Another Firm: Congratulate warmly → pitch role budget (${roleInfo.fixedBudget} + ${roleInfo.totalOte}) → invite for confidential director discussion or 90-day check-in.
+## 13. SCENARIO SPECIFIC BEHAVIORS:
+- Screening: Verify identity → Brief check → Target role → Education → (If Tech: Projects & Tech Stack; If Sales: Experience & Projects) → CTC/Stipend → Notice → WFO Gurugram → Schedule F2F.
+- Reminder (scenario: reminder): "Hi ${candidate?.name || ''}, I'm calling from White Collar Realty regarding your interview scheduled for tomorrow at ${candidate?.interviewTime || 'the scheduled time'}. Just checking in to confirm if you'll be able to attend."
+- Missed Followup (scenario: missed_followup): "Hi ${candidate?.name || ''}, I'm calling from White Collar Realty HR regarding your interview scheduled yesterday. We missed you at the office and wanted to see if you'd like to reschedule."
+- Busy / Callback: "No problem at all. What time today would be best for me to call you back?" Set outcome CALL_BACK_REQUESTED.
+- Not Interested: "Got it. Thank you for your time, and have a wonderful day ahead." Set outcome NOT_INTERESTED.
+- Already Joined Another Firm: Congratulate warmly → pitch senior portfolio (${roleInfo.budgetBand} + ${roleInfo.oteBand}) → propose confidential director meet or 90-day pipeline check-in.
 
 ---
 
-## 21. HR DECISION OUTCOMES:
+## 14. HR DECISION OUTCOMES:
 "SCREENING_COMPLETED" | "INTERVIEW_ELIGIBLE" | "INTERVIEW_SCHEDULED" | "FOLLOW_UP_REQUIRED" | "NOT_INTERESTED" | "NO_ANSWER" | "CALL_BACK_REQUESTED" | "INTERVIEW_RESCHEDULE_REQUIRED" | "INTERVIEW_CANCELLED" | "INTERVIEW_ATTENDED" | "INTERVIEW_MISSED" | "REJECTED" | "MANUAL_HR_REVIEW_REQUIRED"
-
----
-
-## 22. FINAL DIRECTIVE:
-Candidate must NEVER feel "I am answering a form." It must feel like an intelligent, natural voice conversation with a skilled HR executive. WORK LIKE GOOGLE ASSISTANT / ALEXA!
 `;
 }
 
@@ -1810,6 +1852,12 @@ const interactionResponseSchema = {
       properties: {
         candidate_name: { type: Type.STRING },
         target_role: { type: Type.STRING },
+        education: { type: Type.STRING },
+        education_degree: { type: Type.STRING },
+        education_college: { type: Type.STRING },
+        graduation_year: { type: Type.STRING },
+        tech_projects: { type: Type.STRING },
+        programming_languages: { type: Type.STRING },
         current_company: { type: Type.STRING },
         designation: { type: Type.STRING },
         total_experience: { type: Type.STRING },
@@ -1820,6 +1868,7 @@ const interactionResponseSchema = {
         expected_salary: { type: Type.STRING },
         salary_not_disclosed: { type: Type.BOOLEAN },
         current_location: { type: Type.STRING },
+        work_from_office_agreed: { type: Type.BOOLEAN },
         notice_period: { type: Type.STRING },
         earliest_joining_date: { type: Type.STRING },
         interested: { type: Type.STRING },
@@ -1836,6 +1885,14 @@ const interactionResponseSchema = {
     extractedFields: {
       type: Type.OBJECT,
       properties: {
+        educationDegree: { type: Type.STRING },
+        educationCollege: { type: Type.STRING },
+        graduationYear: { type: Type.STRING },
+        techProjectsSummary: { type: Type.STRING },
+        programmingLanguages: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+        },
         currentCompany: { type: Type.STRING },
         currentDesignation: { type: Type.STRING },
         totalExperienceYears: { type: Type.NUMBER },
@@ -1851,6 +1908,7 @@ const interactionResponseSchema = {
         currentSalaryLPA: { type: Type.STRING },
         expectedSalaryLPA: { type: Type.STRING },
         currentLocation: { type: Type.STRING },
+        workFromOfficeAgreed: { type: Type.BOOLEAN },
         noticePeriodDays: { type: Type.NUMBER },
         earliestJoiningDate: { type: Type.STRING },
         preferredInterviewSlot: { type: Type.STRING },
@@ -2265,6 +2323,46 @@ Rule 37: Generate structured after-call action for HR system with exact screenin
   }
 });
 
+// Endpoint: Fetch live career job openings & internships for White Collar Realty (https://whitecollarrealty.com/career)
+app.get('/api/career/fetch-live', async (req, res) => {
+  try {
+    const roles = Object.values(WHITE_COLLAR_JOB_DESCRIPTIONS).map((jd) => ({
+      id: jd.id,
+      title: jd.title,
+      department: jd.department,
+      roleType: jd.roleType,
+      category: jd.category,
+      isTechRole: jd.isTechRole,
+      isInternship: jd.isInternship,
+      location: jd.location,
+      minExperienceYears: jd.minExperienceYears,
+      maxExperienceYears: jd.maxExperienceYears,
+      budgetBand: jd.budgetBand,
+      oteBand: jd.oteBand,
+      educationRequirement: jd.educationRequirement,
+      techStack: jd.techStack,
+      keyResponsibilities: jd.keyResponsibilities,
+      requiredSkills: jd.requiredSkills,
+      roleSpecificQuestions: jd.roleSpecificQuestions,
+      marketFocus: jd.marketFocus,
+      noticePeriodExpectation: jd.noticePeriodExpectation,
+      lastSyncedAt: new Date().toISOString(),
+    }));
+
+    return res.json({
+      success: true,
+      source: 'https://whitecollarrealty.com/career',
+      lastSyncedAt: new Date().toISOString(),
+      totalJobs: roles.filter((r) => r.roleType === 'Job').length,
+      totalInternships: roles.filter((r) => r.roleType === 'Internship').length,
+      roles,
+    });
+  } catch (error) {
+    console.error('Error fetching live career data:', error);
+    return res.status(500).json({ error: 'Failed to fetch career roles' });
+  }
+});
+
 // Vite middleware & Production static serving
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
@@ -2281,7 +2379,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`White Collar Realty HR Voice Server running on http://0.0.0.0:${PORT}`);
   });
 }

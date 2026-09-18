@@ -25,6 +25,18 @@ export type InterviewStatus =
   | 'Declined';
 
 export interface ScreeningData {
+  // Education & Academic Credentials (HR Round 1 mandatory)
+  educationDegree?: string; // e.g., 'B.Tech Computer Science', 'MBA Marketing', 'BCA', 'B.Com'
+  educationCollege?: string; // e.g., 'DTU Delhi', 'IIT Roorkee', 'Amity Gurugram', 'Delhi University'
+  graduationYear?: number | string; // e.g., 2024, 2025, 2022
+  
+  // Tech & Engineering Screening Evaluation
+  techProjectsSummary?: string; // Key projects built e.g. Real Estate CRM portal, AI Voice Bot
+  programmingLanguages?: string[]; // e.g. ['TypeScript', 'React', 'Node.js', 'Python', 'SQL']
+  techFrameworksAndTools?: string[]; // e.g. ['FastAPI', 'PostgreSQL', 'Docker', 'Tailwind']
+  githubOrPortfolioUrl?: string;
+
+  // Real Estate & Sales Evaluation
   currentCompany?: string;
   currentDesignation?: string;
   totalExperienceYears?: number;
@@ -34,13 +46,21 @@ export interface ScreeningData {
     dubai: boolean;
     details?: string;
   };
-  currentSalaryLPA?: string;
-  expectedSalaryLPA?: string;
+
+  // Internship Specific Fields
+  isInternship?: boolean;
+  internshipDurationMonths?: number;
+  availabilityForFullTime?: boolean;
+
+  // HR Logistics & Compensation
+  currentSalaryLPA?: string; // or stipend e.g., '₹25,000/mo' or '12 LPA Fixed'
+  expectedSalaryLPA?: string; // or expected stipend
   currentLocation?: string;
   noticePeriodDays?: number;
   earliestJoiningDate?: string;
   preferredInterviewSlot?: string;
   interviewVenueConfirmed?: boolean;
+  workFromOfficeAgreed?: boolean; // M3M Urbana Sector 67 Gurugram HQ
 }
 
 export interface ChatMessage {
@@ -177,6 +197,13 @@ export interface FollowupItem {
 export interface ConversationMemory {
   candidate_name: string;
   target_role: string;
+  education_degree?: string;
+  education_college?: string;
+  graduation_year?: string;
+  tech_projects?: string;
+  programming_languages?: string;
+  is_tech_role?: boolean;
+  is_internship?: boolean;
   current_company: string;
   designation: string;
   total_experience: string;
@@ -189,6 +216,7 @@ export interface ConversationMemory {
   current_location: string;
   notice_period: string;
   earliest_joining_date: string;
+  work_from_office_agreed?: boolean;
   interested: string;
   interview_date: string;
   interview_time: string;
@@ -237,14 +265,253 @@ export interface JobDescription {
   title: string;
   department: string;
   location: string;
+  roleType?: 'Job' | 'Internship';
+  category?: 'Tech' | 'Real Estate & Sales' | 'Marketing' | 'HR' | 'Finance & Ops';
+  isTechRole?: boolean;
+  isInternship?: boolean;
   minExperienceYears: number;
   maxExperienceYears: number;
   minRealEstateExpYears: number;
   budgetBand: string;
   oteBand: string;
+  educationRequirement?: string;
+  techStack?: string[];
   keyResponsibilities: string[];
   requiredSkills: string[];
   marketFocus: string;
   noticePeriodExpectation: string;
   roleSpecificQuestions: string[];
 }
+
+export type TeamRoleType = 'HR Operations' | 'Support & Logistics' | 'Hiring Manager' | 'Director / Executive' | 'Branch Desk';
+
+export interface TeamEmailMember {
+  id: string;
+  name: string;
+  email: string;
+  role: TeamRoleType;
+  department: string;
+  isActive: boolean;
+  receiveGmailSummaries: boolean;
+  receiveCalendarInvites: boolean;
+  receiveSheetsSyncAlerts: boolean;
+  receiveDriveDossierLinks: boolean;
+  receiveWhatsAppAlerts: boolean;
+  phone?: string;
+  addedAt: string;
+}
+
+export interface TeamAutomationConfig {
+  autoSyncGoogleSheets: boolean;
+  autoSendGmailTeamSummaries: boolean;
+  autoBookGoogleCalendar: boolean;
+  autoArchiveDriveDossier: boolean;
+  autoSendCandidateWhatsApp: boolean;
+  autoSendCandidateEmail: boolean;
+  googleSheetName: string;
+  googleDriveFolderName: string;
+  notifyOnCallComplete: boolean;
+  notifyOnInterviewScheduled: boolean;
+  notifyOnCallbackRequested: boolean;
+  teamMembers: TeamEmailMember[];
+}
+
+export interface AutomationDispatchResult {
+  id: string;
+  timestamp: string;
+  candidateName: string;
+  candidateRole: string;
+  event: 'Call Completed' | 'Interview Scheduled' | 'Manual Data Share' | 'Candidate Screened';
+  status: 'Success' | 'Partial' | 'Failed';
+  dispatchedToEmails: string[];
+  sheetsSynced: boolean;
+  calendarEventCreated: boolean;
+  gmailSentCount: number;
+  driveDossierCreated: boolean;
+  whatsAppPrepared: boolean;
+  details: string;
+}
+
+export type CandidatePriorityLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface CandidateCalculatedPriority {
+  level: CandidatePriorityLevel;
+  score: number; // 0 - 100
+  reasons: string[];
+}
+
+export interface CandidateAnalysisSummary {
+  strengths: string[];
+  redFlags: string[];
+  gurgaonMarketFit: string;
+  ctcFit: string;
+  noticePeriodFit: string;
+  hrActionRecommendation: string;
+  generatedAt: string;
+}
+
+export interface GoogleSheetsSyncConfig {
+  sheetId: string;
+  sheetName: string;
+  spreadsheetTitle: string;
+  autoSyncEnabled: boolean;
+  syncIntervalSeconds: number; // e.g. 30 seconds
+  webhookUrl?: string;
+  appsScriptUrl?: string;
+  lastSyncedTimestamp?: string;
+  autoPushOnCallEnd: boolean;
+  autoPushOnStatusChange: boolean;
+}
+
+export interface GoogleSheetsSyncLog {
+  id: string;
+  timestamp: string;
+  type: 'BACKGROUND_CRON' | 'MANUAL_TRIGGER' | 'ON_CALL_END' | 'ON_STATUS_CHANGE' | 'BATCH_IMPORT';
+  status: 'SUCCESS' | 'WARNING' | 'FAILED';
+  recordsCount: number;
+  message: string;
+  sheetUrl: string;
+}
+
+export interface CareerJobOpening {
+  id: string;
+  title: string;
+  code: string;
+  department: string;
+  roleType?: 'Job' | 'Internship';
+  category?: 'Tech' | 'Real Estate & Sales' | 'Marketing' | 'HR' | 'Finance & Ops';
+  isTechRole?: boolean;
+  isInternship?: boolean;
+  location: string;
+  openingsCount: number;
+  minExpYears: number;
+  maxExpYears: number;
+  budgetBand: string;
+  oteBand: string;
+  status: 'Active' | 'Urgent' | 'Draft';
+  careerUrl: string;
+  experienceLevel: 'Intern' | 'Entry' | 'Mid' | 'Senior' | 'Leadership';
+  educationRequirement?: string;
+  techStack?: string[];
+  keyResponsibilities: string[];
+  requiredSkills: string[];
+  mustHaveQualifications: string[];
+  screeningQuestions: string[];
+  lastSyncedAt?: string;
+}
+
+export interface DataCleaningReport {
+  totalProcessed: number;
+  validCandidatesImported: number;
+  phonesNormalized: number;
+  namesCleaned: number;
+  duplicatesMerged: number;
+  rolesStandardized: number;
+  prioritiesComputed: number;
+  errors: string[];
+}
+
+export interface DuplicateCandidateGroup {
+  id: string;
+  reason: 'PHONE_MATCH' | 'EMAIL_MATCH' | 'NAME_PHONE_MATCH';
+  primaryCandidate: Candidate;
+  duplicateCandidates: Candidate[];
+  confidence: 'HIGH' | 'EXACT' | 'FUZZY';
+  matchedKey: string;
+}
+
+export interface DataHygieneMetrics {
+  hygieneScore: number; // 0 - 100%
+  totalCandidates: number;
+  validPhonesCount: number;
+  standardizedNamesCount: number;
+  duplicateProfilesCount: number;
+  completeScreeningsCount: number;
+  scheduledInterviewsCount: number;
+}
+
+// Gmail Integration & Follow-up Sequences
+export type GmailSequenceType = 
+  | 'INTERVIEW_INVITE' 
+  | 'SLOT_CONFIRMATION' 
+  | 'POST_SCREENING_NEXT_STEPS' 
+  | 'MISSED_INTERVIEW_RESCHEDULE' 
+  | 'OFFER_LETTER_PREVIEW' 
+  | 'GENERAL_FOLLOWUP';
+
+export interface GmailEmailRecord {
+  id: string;
+  candidateId: string;
+  candidateEmail: string;
+  candidateName: string;
+  subject: string;
+  bodyHtml: string;
+  sequenceType: GmailSequenceType;
+  status: 'QUEUED' | 'SENT' | 'DRAFT' | 'OPENED';
+  sentAt?: string;
+  senderEmail: string;
+  ccEmails?: string[];
+  trackingId: string;
+  scheduledFor?: string;
+}
+
+export interface GmailSequenceTemplate {
+  id: string;
+  name: string;
+  type: GmailSequenceType;
+  subjectTemplate: string;
+  bodyTemplate: string;
+  delayHours?: number;
+  autoTriggerOnStatus?: CandidateStatus | 'INTERVIEW_BOOKED';
+}
+
+// Google Calendar API Integration
+export interface GoogleCalendarEvent {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
+  title: string;
+  description: string;
+  location: string;
+  startTime: string; // ISO or formatted
+  endTime: string;
+  status: 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED' | 'RESCHEDULED';
+  googleCalendarLink: string;
+  icsDownloadUrl?: string;
+  attendees: string[];
+  reminderMinutesBefore: number[];
+  syncedAt: string;
+  eventId?: string;
+}
+
+// Voice Transcript Sentiment & Talk-Time Analytics
+export type SentimentCategory = 'Positive' | 'Interested' | 'Neutral' | 'Hesitant' | 'Resistant';
+
+export interface VoiceAnalyticsMetrics {
+  candidateId: string;
+  candidateName: string;
+  callRecordId: string;
+  totalDurationSeconds: number;
+  candidateTalkTimeSeconds: number;
+  candidateTalkTimePercentage: number;
+  agentTalkTimeSeconds: number;
+  agentTalkTimePercentage: number;
+  silenceSeconds: number;
+  silencePercentage: number;
+  candidateWordsCount: number;
+  agentWordsCount: number;
+  speakingRateWPM: number;
+  overallSentiment: SentimentCategory;
+  sentimentScore: number; // 0 - 100
+  engagementIndex: number; // 0 - 100
+  communicationClarity: 'Excellent' | 'Good' | 'Average' | 'Needs Improvement';
+  luxurySalesAptitudeScore: number; // 0 - 100
+  keyInterestSignals: string[];
+  detectedHesitations: string[];
+  topDiscussedKeywords: { word: string; count: number; category: string }[];
+  turnCount: number;
+  analyzedAt: string;
+}
+
+

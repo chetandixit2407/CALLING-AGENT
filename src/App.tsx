@@ -6,7 +6,7 @@ import {
   Bot, Phone, ChevronRight, RefreshCw, Plus, CheckCircle, 
   HelpCircle, Volume2, Mail, Bell, ShieldAlert, Tag, X
 } from 'lucide-react';
-import { Candidate, InterviewSlot, CallScenario } from './types';
+import { Candidate, InterviewSlot, CallScenario, TeamAutomationConfig, CareerJobOpening, GoogleSheetsSyncConfig, DataCleaningReport } from './types';
 import { INITIAL_CANDIDATES, INITIAL_INTERVIEW_SLOTS } from './data/mockCandidates';
 import { Header } from './components/Header';
 import { MetricsBar } from './components/MetricsBar';
@@ -18,18 +18,64 @@ import { FollowupQueueTab } from './components/FollowupQueueTab';
 import { NewCandidateModal } from './components/NewCandidateModal';
 import { ConfirmationEmailModal } from './components/ConfirmationEmailModal';
 import { WhatsAppReminderModal } from './components/WhatsAppReminderModal';
+import { TeamEmailDistributionModal } from './components/TeamEmailDistributionModal';
+import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
+import { CareerRolesManagerModal } from './components/CareerRolesManagerModal';
+import { DataImportExportModal } from './components/DataImportExportModal';
+import { CandidatePriorityBadge } from './components/CandidatePriorityBadge';
+import { MarketNewsFeedWidget } from './components/MarketNewsFeedWidget';
+import { GmailSequenceModal } from './components/GmailSequenceModal';
+import { GoogleCalendarSyncModal } from './components/GoogleCalendarSyncModal';
+import { VoiceSentimentAnalyticsDashboard } from './components/VoiceSentimentAnalyticsDashboard';
 import { vapiService, VapiCallStatus, DEFAULT_VAPI_ASSISTANT_ID } from './utils/vapiService';
+import { 
+  getTeamAutomationConfig, 
+  executeAutomatedTeamDataShare 
+} from './utils/teamAutomationService';
+import { 
+  getGoogleSheetsConfig, 
+  syncCandidatesToGoogleSheets 
+} from './utils/googleSheetsSyncService';
+import { autoScheduleGoogleCalendarInterview } from './utils/googleCalendarService';
+import { getSavedCareerOpenings } from './data/careerRolesData';
+import { calculateCandidatePriority } from './utils/candidateAnalysisEngine';
 
 export default function App() {
   const [candidates, setCandidates] = useState<Candidate[]>(INITIAL_CANDIDATES);
   const [interviewSlots, setInterviewSlots] = useState<InterviewSlot[]>(INITIAL_INTERVIEW_SLOTS);
-  const [activeTab, setActiveTab] = useState<'roster' | 'schedule' | 'followups' | 'transcripts'>('roster');
+  const [activeTab, setActiveTab] = useState<'roster' | 'schedule' | 'followups' | 'analytics' | 'transcripts'>('roster');
   
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [metricsFilter, setMetricsFilter] = useState('all');
   const [dayAlertFilter, setDayAlertFilter] = useState<'all' | 'overdue' | 'today' | 'tomorrow' | 'pipeline'>('all');
+
+  // Market News Feed Widget state
+  const [isMarketNewsOpen, setIsMarketNewsOpen] = useState<boolean>(false);
+
+  // Gmail Sequence Integration state
+  const [showGmailModal, setShowGmailModal] = useState<boolean>(false);
+  const [gmailCandidate, setGmailCandidate] = useState<Candidate | null>(null);
+
+  // Google Calendar Integration state
+  const [showGCalModal, setShowGCalModal] = useState<boolean>(false);
+
+  // Team & Multi-Recipient Automation state
+  const [teamConfig, setTeamConfig] = useState<TeamAutomationConfig>(getTeamAutomationConfig());
+  const [showTeamModal, setShowTeamModal] = useState<boolean>(false);
+
+  // Google Sheets Sync Background Service state
+  const [sheetsConfig, setSheetsConfig] = useState<GoogleSheetsSyncConfig>(getGoogleSheetsConfig());
+  const [showSheetsModal, setShowSheetsModal] = useState<boolean>(false);
+  const [isSheetsSyncing, setIsSheetsSyncing] = useState<boolean>(false);
+
+  // Career Roles Manager (whitecollarrealty.com/career) state
+  const [careerRoles, setCareerRoles] = useState<CareerJobOpening[]>(getSavedCareerOpenings());
+  const [showCareerModal, setShowCareerModal] = useState<boolean>(false);
+
+  // Data Import / Export / Cleaning state
+  const [showDataModal, setShowDataModal] = useState<boolean>(false);
 
   // Modals state
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
@@ -39,7 +85,8 @@ export default function App() {
   const [confirmationMailCandidate, setConfirmationMailCandidate] = useState<Candidate | null>(null);
   const [whatsAppCandidate, setWhatsAppCandidate] = useState<{
     candidate: Candidate;
-    template?: 'unanswered' | 'interview_reminder' | 'missed_followup';
+    template?: 'unanswered' | 'interview_reminder' | 'missed_followup' | 'callback' | 'pipeline' | 'query_reply';
+    initialQuery?: string;
   } | null>(null);
 
   // Vapi Voice Assistant state
@@ -71,6 +118,25 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  // Background Google Sheets Synchronization Service for HR Reporting
+  useEffect(() => {
+    if (!sheetsConfig.autoSyncEnabled) return;
+
+    const intervalMs = Math.max((sheetsConfig.syncIntervalSeconds || 30) * 1000, 10000);
+    const syncInterval = setInterval(async () => {
+      try {
+        setIsSheetsSyncing(true);
+        await syncCandidatesToGoogleSheets(candidates, 'BACKGROUND_CRON', sheetsConfig);
+      } catch (err) {
+        console.error('Background Google Sheets sync error:', err);
+      } finally {
+        setIsSheetsSyncing(false);
+      }
+    }, intervalMs);
+
+    return () => clearInterval(syncInterval);
+  }, [candidates, sheetsConfig]);
 
   const handleEmailSent = (candidateId: string) => {
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -238,10 +304,15 @@ export default function App() {
     }
 
     if (priorityFilter !== 'all') {
-      const p = getCandidatePriority(c);
-      if (priorityFilter === 'high' && p.key !== 'high') return false;
-      if (priorityFilter === 'upcoming' && p.key !== 'upcoming') return false;
-      if (priorityFilter === 'callback' && p.key !== 'callback') return false;
+      const calcP = calculateCandidatePriority(c);
+      if (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(priorityFilter)) {
+        if (calcP.level !== priorityFilter) return false;
+      } else {
+        const p = getCandidatePriority(c);
+        if (priorityFilter === 'high' && p.key !== 'high') return false;
+        if (priorityFilter === 'upcoming' && p.key !== 'upcoming') return false;
+        if (priorityFilter === 'callback' && p.key !== 'callback') return false;
+      }
     }
 
     return true;
@@ -272,6 +343,16 @@ export default function App() {
   const handleStartCall = (candidate: Candidate, scenario: string = 'screening') => {
     setActiveCallCandidate(candidate);
     setActiveCallScenario(scenario as CallScenario);
+  };
+
+  // Trigger manual or programmatic data share with team emails
+  const handleShareWithTeam = async (candidate: Candidate, eventName: 'Call Completed' | 'Interview Scheduled' | 'Manual Data Share' | 'Candidate Screened' = 'Manual Data Share') => {
+    const res = await executeAutomatedTeamDataShare(candidate, eventName, teamConfig);
+    setCompletionToast({
+      candidate,
+      message: `Shared with ${res.dispatchedToEmails.length} HR & Support team emails (${res.dispatchedToEmails.join(', ')})`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
   };
 
   // Called when a live voice call ends
@@ -309,6 +390,23 @@ export default function App() {
       );
     }
 
+    // Automatically trigger team data dispatch across all configured HR & Support emails
+    executeAutomatedTeamDataShare(
+      updatedCandidate,
+      bookedSlotId ? 'Interview Scheduled' : 'Call Completed',
+      teamConfig
+    );
+
+    // Auto push updated candidate details to Google Sheet if enabled
+    if (sheetsConfig.autoPushOnCallEnd) {
+      setCandidates((current) => {
+        syncCandidatesToGoogleSheets(current, 'ON_CALL_END', sheetsConfig).catch((e) =>
+          console.error('Auto sheet sync on call end error', e)
+        );
+        return current;
+      });
+    }
+
     // Update selected candidate drawer if open
     if (selectedCandidate && selectedCandidate.id === updatedCandidate.id) {
       setSelectedCandidate(updatedCandidate);
@@ -317,7 +415,7 @@ export default function App() {
     // Trigger toast notification with View Notes action
     setCompletionToast({
       candidate: updatedCandidate,
-      message: `Screening notes auto-saved by Arjun AI for ${updatedCandidate.name}`,
+      message: `Screening notes auto-saved & synced to ${teamConfig.teamMembers.filter(m => m.isActive).length} team emails for ${updatedCandidate.name}`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     });
 
@@ -408,6 +506,20 @@ export default function App() {
           handleStartCall(targetCandidate, 'screening');
         }}
         onEndCall={handleEndVapiCall}
+        onOpenTeamModal={() => setShowTeamModal(true)}
+        onOpenGoogleSheetsModal={() => setShowSheetsModal(true)}
+        onOpenCareerRolesModal={() => setShowCareerModal(true)}
+        onOpenDataImportExportModal={() => setShowDataModal(true)}
+        onOpenGoogleCalendarModal={() => setShowGCalModal(true)}
+        onOpenGmailModal={() => {
+          setGmailCandidate(selectedCandidate || candidates[0]);
+          setShowGmailModal(true);
+        }}
+        onToggleMarketNews={() => setIsMarketNewsOpen((prev) => !prev)}
+        isMarketNewsOpen={isMarketNewsOpen}
+        teamEmailCount={teamConfig.teamMembers.filter((m) => m.isActive).length}
+        careerRolesCount={careerRoles.length}
+        isSheetsSyncing={isSheetsSyncing}
         vapiCallStatus={vapiCallStatus}
         activeCandidateCount={candidates.length}
       />
@@ -472,6 +584,19 @@ export default function App() {
             </button>
 
             <button
+              id="tab-analytics"
+              onClick={() => setActiveTab('analytics')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                activeTab === 'analytics'
+                  ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-md shadow-indigo-500/25'
+                  : 'bg-slate-900/90 text-indigo-300 hover:text-white border border-indigo-500/30'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
+              <span>Voice Sentiment & Talk-Time Analytics</span>
+            </button>
+
+            <button
               id="tab-transcripts"
               onClick={() => setActiveTab('transcripts')}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
@@ -522,6 +647,10 @@ export default function App() {
                 className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-hidden focus:border-amber-500"
               >
                 <option value="all">All Priorities</option>
+                <option value="CRITICAL">🔥 Tier 1 - Critical Priority</option>
+                <option value="HIGH">⚡ Tier 2 - High Priority</option>
+                <option value="MEDIUM">⏱️ Tier 3 - Medium Priority</option>
+                <option value="LOW">📋 Standard Priority</option>
                 <option value="high">🔴 High Priority (Missed)</option>
                 <option value="upcoming">🟡 Upcoming Slots (Amber)</option>
                 <option value="callback">🟣 Callback Due</option>
@@ -529,6 +658,16 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Real Estate Market News Widget (Gurgaon & Dubai) */}
+        {activeTab === 'roster' && (
+          <div className="mb-5">
+            <MarketNewsFeedWidget
+              isOpen={isMarketNewsOpen}
+              onClose={() => setIsMarketNewsOpen(false)}
+            />
+          </div>
+        )}
 
         {/* TAB 1: CANDIDATE ROSTER & SCREENING */}
         {activeTab === 'roster' && (
@@ -666,12 +805,12 @@ export default function App() {
                     <div>
                       {/* Priority Header Row */}
                       <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800/80">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Priority:</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border flex items-center gap-1 ${priority.badgeClass}`}>
                             <priority.icon className={`w-3 h-3 ${priority.iconColor} ${priority.pulse ? 'animate-pulse' : ''}`} />
                             <span>{priority.label}</span>
                           </span>
+                          <CandidatePriorityBadge candidate={cand} compact={true} />
                         </div>
                         <span className={`px-2.5 py-0.5 text-[10px] font-semibold rounded-full border whitespace-nowrap ${getStatusBadge(cand.status)}`}>
                           {cand.status}
@@ -805,6 +944,17 @@ export default function App() {
                       </button>
 
                       <div className="flex items-center gap-1.5">
+                        {/* Quick Share with HR & Support Emails */}
+                        <button
+                          type="button"
+                          onClick={() => handleShareWithTeam(cand, 'Manual Data Share')}
+                          className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-xs flex items-center gap-1 transition"
+                          title="Broadcast candidate screening & interview details to all HR & Support team emails"
+                        >
+                          <Users className="w-3.5 h-3.5 text-blue-400" />
+                          <span className="hidden xl:inline text-[11px] font-medium">Share</span>
+                        </button>
+
                         {/* Send Confirmation Mail button */}
                         {(cand.interviewSlotId || cand.status === 'Interview Scheduled' || cand.status === 'Attendance Confirmed') && (
                           <button
@@ -815,6 +965,36 @@ export default function App() {
                           >
                             <Mail className="w-3.5 h-3.5 text-amber-400" />
                             <span className="hidden xl:inline text-[11px] font-medium">Mail</span>
+                          </button>
+                        )}
+
+                        {/* Gmail Sequence button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGmailCandidate(cand);
+                            setShowGmailModal(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-xs flex items-center gap-1 transition"
+                          title="Compose and send automated Gmail invitation / follow-up sequence"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                          <span className="hidden xl:inline text-[11px] font-medium">Gmail Seq</span>
+                        </button>
+
+                        {/* Google Calendar button */}
+                        {(cand.interviewSlotId || cand.status === 'Interview Scheduled' || cand.status === 'Attendance Confirmed') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              autoScheduleGoogleCalendarInterview(cand);
+                              setShowGCalModal(true);
+                            }}
+                            className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-xs flex items-center gap-1 transition"
+                            title="Schedule & sync with Google Calendar"
+                          >
+                            <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                            <span className="hidden xl:inline text-[11px] font-medium">GCal</span>
                           </button>
                         )}
 
@@ -874,6 +1054,7 @@ export default function App() {
             onRescheduleClick={handleRescheduleClick}
             onOpenConfirmationMail={(cand) => setConfirmationMailCandidate(cand)}
             onOpenWhatsApp={(cand, template) => setWhatsAppCandidate({ candidate: cand, template })}
+            onOpenTeamModal={() => setShowTeamModal(true)}
           />
         )}
 
@@ -887,7 +1068,23 @@ export default function App() {
           />
         )}
 
-        {/* TAB 4: VOICE LOGS & TRANSCRIPTS */}
+        {/* TAB 4: VOICE SENTIMENT & TALK-TIME ANALYTICS DASHBOARD */}
+        {activeTab === 'analytics' && (
+          <VoiceSentimentAnalyticsDashboard
+            candidates={candidates}
+            onSelectCandidate={(cand) => setSelectedCandidate(cand)}
+            onOpenGmailForCandidate={(cand) => {
+              setGmailCandidate(cand);
+              setShowGmailModal(true);
+            }}
+            onOpenGCalForCandidate={(cand) => {
+              autoScheduleGoogleCalendarInterview(cand);
+              setShowGCalModal(true);
+            }}
+          />
+        )}
+
+        {/* TAB 5: VOICE LOGS & TRANSCRIPTS */}
         {activeTab === 'transcripts' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
@@ -976,10 +1173,12 @@ export default function App() {
             if (selectedCandidate?.id === updatedCandidate.id) {
               setSelectedCandidate(updatedCandidate);
             }
+            // Trigger automatic team share
+            executeAutomatedTeamDataShare(updatedCandidate, 'Call Completed', teamConfig);
             // Trigger toast notification with View Notes action
             setCompletionToast({
               candidate: updatedCandidate,
-              message: `Screening notes auto-saved by Arjun AI for ${updatedCandidate.name}`,
+              message: `Screening notes auto-saved & synced to ${teamConfig.teamMembers.filter(m => m.isActive).length} team emails for ${updatedCandidate.name}`,
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             });
           }}
@@ -999,7 +1198,7 @@ export default function App() {
           onClose={() => setActiveCallCandidate(null)}
           onCallEnded={handleCallEnded}
           onOpenConfirmationMail={(cand) => setConfirmationMailCandidate(cand)}
-          onOpenWhatsApp={(cand, template) => setWhatsAppCandidate({ candidate: cand, template })}
+          onOpenWhatsApp={(cand, template, query) => setWhatsAppCandidate({ candidate: cand, template, initialQuery: query })}
         />
       )}
 
@@ -1012,6 +1211,15 @@ export default function App() {
           onStartVapiCall={(cand) => handleStartVapiCall(cand)}
           onOpenConfirmationMail={(cand) => setConfirmationMailCandidate(cand)}
           onOpenWhatsApp={(cand, template) => setWhatsAppCandidate({ candidate: cand, template })}
+          onOpenGmailSequence={(cand) => {
+            setGmailCandidate(cand);
+            setShowGmailModal(true);
+          }}
+          onOpenGoogleCalendar={(cand) => {
+            autoScheduleGoogleCalendarInterview(cand);
+            setShowGCalModal(true);
+          }}
+          onShareWithTeam={(cand) => handleShareWithTeam(cand, 'Manual Data Share')}
           onUpdateCandidate={(updated) => {
             setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
             setSelectedCandidate(updated);
@@ -1043,8 +1251,97 @@ export default function App() {
           candidate={whatsAppCandidate.candidate}
           isOpen={Boolean(whatsAppCandidate)}
           defaultTemplate={whatsAppCandidate.template}
+          initialQuery={whatsAppCandidate.initialQuery}
           onClose={() => setWhatsAppCandidate(null)}
           onWhatsAppSent={handleWhatsAppSent}
+        />
+      )}
+
+      {/* MODAL 6: MULTI-RECIPIENT HR & SUPPORT EMAILS AUTOMATION MODAL */}
+      {showTeamModal && (
+        <TeamEmailDistributionModal
+          isOpen={showTeamModal}
+          onClose={() => setShowTeamModal(false)}
+          candidates={candidates}
+          onTriggerCandidateShare={(cand) => handleShareWithTeam(cand, 'Manual Data Share')}
+          onConfigUpdated={(cfg) => setTeamConfig(cfg)}
+        />
+      )}
+
+      {/* MODAL 7: GOOGLE SHEETS LIVE SYNC MODAL */}
+      {showSheetsModal && (
+        <GoogleSheetsSyncModal
+          isOpen={showSheetsModal}
+          onClose={() => setShowSheetsModal(false)}
+          candidates={candidates}
+          onSyncTriggered={() => {
+            setSheetsConfig(getGoogleSheetsConfig());
+          }}
+        />
+      )}
+
+      {/* MODAL 8: CAREER ROLES MANAGER (whitecollarrealty.com/career) */}
+      {showCareerModal && (
+        <CareerRolesManagerModal
+          isOpen={showCareerModal}
+          onClose={() => setShowCareerModal(false)}
+          onRolesUpdated={(updated) => {
+            setCareerRoles(updated);
+          }}
+        />
+      )}
+
+      {/* MODAL 9: CANDIDATE DATA IMPORT, EXPORT & CLEANING ENGINE */}
+      {showDataModal && (
+        <DataImportExportModal
+          isOpen={showDataModal}
+          onClose={() => setShowDataModal(false)}
+          candidates={candidates}
+          onUpdateCandidates={(updated) => {
+            setCandidates(updated);
+            if (sheetsConfig.autoSyncEnabled) {
+              syncCandidatesToGoogleSheets(updated, 'BATCH_IMPORT', sheetsConfig).catch((e) =>
+                console.error('Sheet sync error on update', e)
+              );
+            }
+          }}
+          onDataImported={(newCands, report) => {
+            setCandidates(newCands);
+            if (sheetsConfig.autoSyncEnabled) {
+              syncCandidatesToGoogleSheets(newCands, 'BATCH_IMPORT', sheetsConfig).catch((e) =>
+                console.error('Sheet sync error on import', e)
+              );
+            }
+            if (newCands.length > 0) {
+              setCompletionToast({
+                candidate: newCands[0],
+                message: `Cleaned & loaded ${report.totalCleaned} candidates (${report.duplicatesRemoved} duplicates removed, ${report.phoneNumbersNormalized} phones standardized)`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              });
+            }
+          }}
+        />
+      )}
+
+      {/* MODAL 10: GMAIL INTERVIEW INVITATION & SEQUENCING ENGINE */}
+      {showGmailModal && (
+        <GmailSequenceModal
+          candidate={gmailCandidate || selectedCandidate || candidates[0]}
+          isOpen={showGmailModal}
+          onClose={() => setShowGmailModal(false)}
+        />
+      )}
+
+      {/* MODAL 11: GOOGLE CALENDAR AUTOMATED INTERVIEW SCHEDULER */}
+      {showGCalModal && (
+        <GoogleCalendarSyncModal
+          candidates={candidates}
+          isOpen={showGCalModal}
+          onClose={() => setShowGCalModal(false)}
+          onOpenGmailForCandidate={(cand) => {
+            setGmailCandidate(cand);
+            setShowGmailModal(true);
+          }}
         />
       )}
 

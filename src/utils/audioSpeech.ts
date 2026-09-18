@@ -169,6 +169,10 @@ export class VoiceAudioManager {
     }
   }
 
+  playRing(): () => void {
+    return this.playRingTone();
+  }
+
   // Play call connected beep
   playConnectChime() {
     try {
@@ -235,52 +239,7 @@ export class VoiceAudioManager {
     } catch {}
   }
 
-  // Human Cadence Defaults
-  public static readonly DEFAULT_RATE = 0.98;
-  public static readonly DEFAULT_PITCH = 1.02;
-  public static readonly SENTENCE_PAUSE_MS = 220; // Human breathing interval at sentence ends (. ? ! ।)
-  public static readonly CLAUSE_PAUSE_MS = 110;   // Human breathing interval at clause breaks (, ; : — -)
-  public static readonly VOCAL_TRANSITION_MS = 35; // Transition between micro-chunks
-
-  private speechQueue: Array<{
-    id: string;
-    text: string;
-    pauseAfterMs: number;
-    options: {
-      language?: 'English' | 'Hindi' | 'Auto';
-      rate?: number;
-      pitch?: number;
-      onStart?: () => void;
-      onEnd?: () => void;
-      onError?: (e: any) => void;
-    };
-  }> = [];
-
-  private isQueueRunning: boolean = false;
-  private activeWord: string = '';
-  private wordSubscribers: Set<(word: string) => void> = new Set();
-  private pauseTimer: any = null;
-  private wordTimerInterval: any = null;
-
-  // Active word subscription for real-time visual UI badge
-  subscribeActiveWord(listener: (word: string) => void): () => void {
-    this.wordSubscribers.add(listener);
-    listener(this.activeWord);
-    return () => {
-      this.wordSubscribers.delete(listener);
-    };
-  }
-
-  getActiveWord(): string {
-    return this.activeWord;
-  }
-
-  private setActiveWord(word: string) {
-    this.activeWord = word;
-    this.wordSubscribers.forEach((fn) => fn(word));
-  }
-
-  // Speak single text directly (interrupts previous speech)
+  // Speak text using browser speech synthesis
   speak(
     text: string,
     options: {
@@ -292,62 +251,59 @@ export class VoiceAudioManager {
       onError?: (e: any) => void;
     } = {}
   ): void {
-    this.stopSpeaking();
-    this.enqueueSentence(text, {
-      ...options,
-      isImmediate: true,
-    });
-  }
+    if (!this.synth) {
+      options.onEnd?.();
+      return;
+    }
 
-  /**
-   * Micro-Token Streaming Pipeline:
-   * Dispatches Sentence-by-Sentence with Natural Human Cadence & Micro-Pauses.
-   */
-  enqueueSentence(
-    text: string,
-    options: {
-      language?: 'English' | 'Hindi' | 'Auto';
-      rate?: number;
-      pitch?: number;
-      isImmediate?: boolean;
-      onStart?: () => void;
-      onEnd?: () => void;
-      onError?: (e: any) => void;
-    } = {}
-  ): void {
+    // Ensure synthesis is unpaused (fixes browser speech throttle)
+    if (this.synth.paused) {
+      this.synth.resume();
+    }
+
+    this.stopSpeaking();
+
+    // Clean text of markdown/asterisks
     const cleanedText = text.replace(/[*_#`]/g, '').trim();
     if (!cleanedText) {
       options.onEnd?.();
       return;
     }
 
-    // Determine cadence breathing pause based on punctuation
-    let pauseMs = VoiceAudioManager.VOCAL_TRANSITION_MS;
-    if (/[.?!।\n]/.test(cleanedText.slice(-2))) {
-      pauseMs = VoiceAudioManager.SENTENCE_PAUSE_MS; // 220ms
-    } else if (/[,;:—-]/.test(cleanedText.slice(-2))) {
-      pauseMs = VoiceAudioManager.CLAUSE_PAUSE_MS; // 110ms
+    const utterance = new SpeechSynthesisUtterance(cleanedText);
+    // Google Assistant / Alexa natural cadence: crisp, friendly, conversational, warm
+    utterance.rate = options.rate ?? 1.02;
+    utterance.pitch = options.pitch ?? 1.02;
+
+    const selectedVoice = this.findBestIndianVoice(options.language, cleanedText);
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+      utterance.lang = selectedVoice.lang;
+    } else {
+      utterance.lang = options.language === 'Hindi' ? 'hi-IN' : 'en-IN';
     }
 
-    const item = {
-      id: `sq-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      text: cleanedText,
-      pauseAfterMs: pauseMs,
-      options,
+    utterance.onstart = () => {
+      options.onStart?.();
     };
 
-    if (options.isImmediate) {
-      this.speechQueue = [item];
-    } else {
-      this.speechQueue.push(item);
-    }
+    utterance.onend = () => {
+      this.currentUtterance = null;
+      options.onEnd?.();
+    };
 
-    if (!this.isQueueRunning) {
-      this.processQueue();
-    }
+    utterance.onerror = (err) => {
+      console.warn('SpeechSynthesis error:', err);
+      this.currentUtterance = null;
+      options.onEnd?.();
+    };
+
+    this.currentUtterance = utterance;
+    this.synth.speak(utterance);
   }
 
-  // Backwards-compatible speakQueue signature used by live audio callers
+  // Speak a sentence chunk by appending to speech queue for real-time streaming
   speakQueue(
     text: string,
     options: {
@@ -359,38 +315,28 @@ export class VoiceAudioManager {
       onError?: (e: any) => void;
     } = {}
   ): void {
-    this.enqueueSentence(text, options);
-  }
-
-  private processQueue(): void {
-    if (!this.synth || this.speechQueue.length === 0) {
-      this.isQueueRunning = false;
-      this.setActiveWord('');
+    if (!this.synth) {
+      options.onEnd?.();
       return;
     }
 
-    this.isQueueRunning = true;
-
-    // Resume synth if browser suspended it
+    // Ensure synthesis is active and unpaused
     if (this.synth.paused) {
       this.synth.resume();
     }
 
-    const nextItem = this.speechQueue.shift();
-    if (!nextItem) {
-      this.isQueueRunning = false;
-      this.setActiveWord('');
+    const cleanedText = text.replace(/[*_#`]/g, '').trim();
+    if (!cleanedText) {
+      options.onEnd?.();
       return;
     }
 
-    const { text, pauseAfterMs, options } = nextItem;
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(cleanedText);
+    utterance.rate = options.rate ?? 1.02;
+    utterance.pitch = options.pitch ?? 1.02;
 
-    // Natural Human Cadence: 0.98 conversational rate, 1.02 pitch
-    utterance.rate = options.rate ?? VoiceAudioManager.DEFAULT_RATE;
-    utterance.pitch = options.pitch ?? VoiceAudioManager.DEFAULT_PITCH;
+    const selectedVoice = this.findBestIndianVoice(options.language, cleanedText);
 
-    const selectedVoice = this.findBestIndianVoice(options.language, text);
     if (selectedVoice) {
       utterance.voice = selectedVoice;
       utterance.lang = selectedVoice.lang;
@@ -398,95 +344,23 @@ export class VoiceAudioManager {
       utterance.lang = options.language === 'Hindi' ? 'hi-IN' : 'en-IN';
     }
 
-    // Split words for fallback active word simulation if onboundary is not emitted
-    const words = text.split(/\s+/).filter(Boolean);
-    let fallbackWordIdx = 0;
-
     utterance.onstart = () => {
       options.onStart?.();
-
-      if (words.length > 0) {
-        this.setActiveWord(words[0].replace(/[^\w\u0900-\u097F]/g, ''));
-      }
-
-      // Smooth fallback word ticker (~180 words/min at rate 0.98 = ~300ms per word)
-      const msPerWord = Math.max(180, Math.floor(330 / (utterance.rate || 1)));
-      if (this.wordTimerInterval) clearInterval(this.wordTimerInterval);
-      this.wordTimerInterval = setInterval(() => {
-        fallbackWordIdx++;
-        if (fallbackWordIdx < words.length) {
-          const w = words[fallbackWordIdx].replace(/[^\w\u0900-\u097F]/g, '');
-          if (w) this.setActiveWord(w);
-        }
-      }, msPerWord);
-    };
-
-    // Real-time word boundary hook from browser SpeechSynthesis
-    utterance.onboundary = (event: SpeechSynthesisEvent) => {
-      if (event.name === 'word') {
-        const remaining = text.slice(event.charIndex);
-        const match = remaining.match(/^\S+/);
-        if (match) {
-          const spokenWord = match[0].replace(/[^\w\u0900-\u097F]/g, '');
-          if (spokenWord) {
-            this.setActiveWord(spokenWord);
-          }
-        }
-      }
-    };
-
-    const handleSentenceFinish = () => {
-      if (this.wordTimerInterval) {
-        clearInterval(this.wordTimerInterval);
-        this.wordTimerInterval = null;
-      }
-      this.setActiveWord('');
-      this.currentUtterance = null;
-      options.onEnd?.();
-
-      // Natural breathing micro-pause before next queue item or silence
-      if (this.speechQueue.length > 0) {
-        this.pauseTimer = setTimeout(() => {
-          this.processQueue();
-        }, pauseAfterMs);
-      } else {
-        this.isQueueRunning = false;
-      }
     };
 
     utterance.onend = () => {
-      handleSentenceFinish();
+      options.onEnd?.();
     };
 
     utterance.onerror = (err) => {
-      console.warn('SpeechSynthesis utterance error:', err);
-      options.onError?.(err);
-      handleSentenceFinish();
+      console.warn('SpeechSynthesis queue item error:', err);
+      options.onEnd?.();
     };
 
-    this.currentUtterance = utterance;
     this.synth.speak(utterance);
   }
 
-  /**
-   * Instant Barge-In Protection:
-   * Maintained zero-latency floor-yielding; candidate speech instantly silences
-   * speech synthesis and clears the word queue.
-   */
-  stopSpeaking(): void {
-    if (this.pauseTimer) {
-      clearTimeout(this.pauseTimer);
-      this.pauseTimer = null;
-    }
-    if (this.wordTimerInterval) {
-      clearInterval(this.wordTimerInterval);
-      this.wordTimerInterval = null;
-    }
-
-    this.speechQueue = [];
-    this.isQueueRunning = false;
-    this.setActiveWord('');
-
+  stopSpeaking() {
     if (this.synth) {
       this.synth.cancel();
       this.currentUtterance = null;
@@ -494,7 +368,7 @@ export class VoiceAudioManager {
   }
 
   isSpeaking(): boolean {
-    return !!(this.isQueueRunning || (this.synth && this.synth.speaking));
+    return !!(this.synth && this.synth.speaking);
   }
 }
 

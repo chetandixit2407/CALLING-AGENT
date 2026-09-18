@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Calendar, Clock, MapPin, CheckCircle2, User, PhoneCall, 
   CalendarCheck, AlertCircle, XCircle, RefreshCw, Shield,
-  Mail, MessageSquare 
+  Mail, MessageSquare, Users, Sparkles 
 } from 'lucide-react';
 import { InterviewSlot, Candidate } from '../types';
 
@@ -14,6 +14,7 @@ interface InterviewScheduleTabProps {
   onRescheduleClick: (candidate: Candidate) => void;
   onOpenConfirmationMail?: (candidate: Candidate) => void;
   onOpenWhatsApp?: (candidate: Candidate, template?: 'unanswered' | 'interview_reminder' | 'missed_followup') => void;
+  onOpenTeamModal?: () => void;
 }
 
 export const InterviewScheduleTab: React.FC<InterviewScheduleTabProps> = ({
@@ -24,6 +25,7 @@ export const InterviewScheduleTab: React.FC<InterviewScheduleTabProps> = ({
   onRescheduleClick,
   onOpenConfirmationMail,
   onOpenWhatsApp,
+  onOpenTeamModal,
 }) => {
   const bookedSlots = slots.filter((s) => !s.isAvailable);
   const openSlots = slots.filter((s) => s.isAvailable);
@@ -38,13 +40,23 @@ export const InterviewScheduleTab: React.FC<InterviewScheduleTabProps> = ({
               <MapPin className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base font-bold text-white font-['Space_Grotesk']">
                   White Collar Realty • Corporate HQ Interview Center
                 </h3>
                 <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded">
                   Conflict-Free Booking System
                 </span>
+                {onOpenTeamModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenTeamModal}
+                    className="px-2.5 py-0.5 text-[10px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-full flex items-center gap-1 transition"
+                  >
+                    <Users className="w-3 h-3" />
+                    <span>Manage Team Emails</span>
+                  </button>
+                )}
               </div>
               <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
                 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101.
