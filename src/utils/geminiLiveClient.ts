@@ -18,16 +18,32 @@
  * - Instant zero-latency Barge-In: local RMS acoustic threshold + server interruption signal
  */
 
+export interface TranscriptMessage {
+  id: string;
+  sender: 'agent' | 'candidate';
+  text: string;
+  timestamp: string;
+  isFinal?: boolean;
+}
+
+export interface ConnectParams {
+  candidate: any;
+  scenario: string;
+  availableSlotsText?: string;
+  availableSlots?: any[];
+  languagePreference?: string;
+}
+
 export interface GeminiLiveCallbacks {
-  onStatusChange: (status: 'idle' | 'connecting' | 'connected' | 'ended' | 'error') => void;
-  onAgentTranscript: (chunk: string) => void;
-  onUserTranscript: (text: string, isFinal: boolean) => void;
-  onAgentSpeakingChange: (isSpeaking: boolean) => void;
-  onInterrupted: () => void;
-  onToolCall: (name: string, args: any) => void;
-  onTurnComplete: () => void;
-  onVolumeChange: (candidateVolume: number, agentVolume: number) => void;
-  onError: (errorMessage: string) => void;
+  onStatusChange?: (status: 'idle' | 'connecting' | 'connected' | 'ended' | 'error') => void;
+  onAgentTranscript?: (chunk: string) => void;
+  onUserTranscript?: (text: string, isFinal: boolean) => void;
+  onAgentSpeakingChange?: (isSpeaking: boolean) => void;
+  onInterrupted?: () => void;
+  onToolCall?: (name: string, args: any) => void;
+  onTurnComplete?: () => void;
+  onVolumeChange?: (candidateVolume: number, agentVolume: number) => void;
+  onError?: (errorMessage: string) => void;
   onWsOpen?: () => void;
   onWsMessage?: (msg: any) => void;
   onWsError?: (err: any) => void;
@@ -45,6 +61,17 @@ let globalActiveLiveClient: GeminiLiveClient | null = null;
 
 export class GeminiLiveClient {
   public readonly sessionId: string;
+
+  // Public callback hooks for component event-listening
+  public onOpen?: () => void;
+  public onClose?: () => void;
+  public onError?: (err: { message: string } | any) => void;
+  public onTranscript?: (msg: TranscriptMessage) => void;
+  public onSpeaking?: (speaking: boolean) => void;
+  public onVolume?: (vol: number) => void;
+  public onCandidateVolume?: (vol: number) => void;
+  public onInterrupted?: () => void;
+  public onToolCall?: (name: string, args: any) => void;
 
   private transportMode: 'ws' | 'http' = 'ws';
   private ws: WebSocket | null = null;
@@ -78,9 +105,9 @@ export class GeminiLiveClient {
 
   private callbacks: GeminiLiveCallbacks;
 
-  constructor(callbacks: GeminiLiveCallbacks, options?: GeminiLiveClientOptions) {
+  constructor(callbacks?: GeminiLiveCallbacks, options?: GeminiLiveClientOptions) {
     this.sessionId = options?.sessionId || `gls_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    this.callbacks = callbacks;
+    this.callbacks = callbacks || {};
 
     // Terminate any previous global client instance immediately to avoid duplicate audio pipelines
     if (globalActiveLiveClient && globalActiveLiveClient !== this) {
@@ -94,18 +121,29 @@ export class GeminiLiveClient {
     globalActiveLiveClient = this;
   }
 
+  public async connect(params: ConnectParams): Promise<void> {
+    return this.start(
+      params.candidate,
+      params.scenario,
+      params.availableSlots || [],
+      params.languagePreference || 'Auto',
+      params.availableSlotsText
+    );
+  }
+
   public async start(
     candidate: any,
     scenario: string,
-    availableSlots: any[],
-    languagePreference: string = 'Auto'
+    availableSlots: any[] = [],
+    languagePreference: string = 'Auto',
+    availableSlotsText?: string
   ): Promise<void> {
     if (this.callEnded || this.isCleanedUp || this.isConnecting || this.isConnected) {
       return;
     }
 
     this.isConnecting = true;
-    this.callbacks.onStatusChange('connecting');
+    this.callbacks.onStatusChange?.('connecting');
 
     try {
       // 1. Request microphone permission early
@@ -210,6 +248,7 @@ export class GeminiLiveClient {
 
         console.log(`[GeminiLiveClient:${this.sessionId}] [WebSocket Lifecycle] 'onopen' event triggered. Connection established successfully. readyState=${ws.readyState}`);
         this.callbacks.onWsOpen?.();
+        this.onOpen?.();
 
         console.log(`[GeminiLiveClient:${this.sessionId}] WebSocket open. Sending init payload...`);
         ws.send(
@@ -219,6 +258,7 @@ export class GeminiLiveClient {
             candidate,
             scenario,
             availableSlots,
+            availableSlotsText,
             languagePreference,
           })
         );
@@ -261,8 +301,9 @@ export class GeminiLiveClient {
           return;
         }
 
-        this.callbacks.onError('Connection error with Gemini Live server.');
-        this.callbacks.onStatusChange('error');
+        this.callbacks.onError?.('Connection error with Gemini Live server.');
+        this.callbacks.onStatusChange?.('error');
+        this.onError?.(new Error('Connection error with Gemini Live server.'));
       };
 
       ws.onclose = (event: CloseEvent) => {
@@ -281,7 +322,8 @@ export class GeminiLiveClient {
 
         if (!this.callEnded && this.isConnected) {
           this.isConnected = false;
-          this.callbacks.onStatusChange('ended');
+          this.callbacks.onStatusChange?.('ended');
+          this.onClose?.();
         }
       };
     } catch (err: any) {
@@ -292,8 +334,9 @@ export class GeminiLiveClient {
         err?.name === 'NotAllowedError' || err?.message?.includes('Permission')
           ? 'Microphone permission denied. Please allow microphone access to speak with the AI Recruiter.'
           : err?.message || 'Failed to initialize voice session.';
-      this.callbacks.onError(message);
-      this.callbacks.onStatusChange('error');
+      this.callbacks.onError?.(message);
+      this.callbacks.onStatusChange?.('error');
+      this.onError?.(new Error(message));
     } finally {
       this.isConnecting = false;
     }
@@ -446,13 +489,16 @@ export class GeminiLiveClient {
       }
       const rms = Math.sqrt(sum / channel.length);
       const volumeLevel = Math.min(100, Math.round(rms * 450));
-      this.callbacks.onVolumeChange(volumeLevel, this.getAgentVolume());
+      this.callbacks.onVolumeChange?.(volumeLevel, this.getAgentVolume());
+      this.onCandidateVolume?.(volumeLevel);
+      this.onVolume?.(this.getAgentVolume());
 
       // 2. Instant Local Barge-In (If candidate speaks while agent is speaking)
       if (rms > 0.038 && this.isAgentSpeakingState) {
         console.log(`[GeminiLiveClient:${this.sessionId}] Candidate speech detected during agent playback -> Instant Barge-In triggered`);
         this.stopAgentPlayback();
-        this.callbacks.onInterrupted();
+        this.callbacks.onInterrupted?.();
+        this.onInterrupted?.();
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ type: 'interrupt', sessionId: this.sessionId }));
         }
@@ -498,7 +544,8 @@ export class GeminiLiveClient {
       case 'connected':
         console.log(`[GeminiLiveClient:${this.sessionId}] Gemini Live session is connected/ready`);
         this.isConnected = true;
-        this.callbacks.onStatusChange('connected');
+        this.callbacks.onStatusChange?.('connected');
+        this.onOpen?.();
         break;
 
       case 'audio':
@@ -509,36 +556,67 @@ export class GeminiLiveClient {
 
       case 'agent_transcript':
         if (msg.text) {
-          this.callbacks.onAgentTranscript(msg.text);
+          this.callbacks.onAgentTranscript?.(msg.text);
+          this.onTranscript?.({
+            id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            sender: 'agent',
+            text: msg.text,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isFinal: true,
+          });
         }
         break;
 
       case 'user_transcript':
         if (msg.text) {
-          this.callbacks.onUserTranscript(msg.text, !!msg.isFinal);
+          this.callbacks.onUserTranscript?.(msg.text, !!msg.isFinal);
+          this.onTranscript?.({
+            id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            sender: 'candidate',
+            text: msg.text,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isFinal: !!msg.isFinal,
+          });
         }
         break;
 
       case 'transcript':
         if (msg.text) {
-          if (msg.sender === 'candidate') {
-            this.callbacks.onUserTranscript(msg.text, true);
+          const isCandidate = msg.sender === 'candidate';
+          if (isCandidate) {
+            this.callbacks.onUserTranscript?.(msg.text, true);
           } else {
-            this.callbacks.onAgentTranscript(msg.text);
+            this.callbacks.onAgentTranscript?.(msg.text);
           }
+          this.onTranscript?.({
+            id: msg.id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            sender: isCandidate ? 'candidate' : 'agent',
+            text: msg.text,
+            timestamp: msg.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isFinal: true,
+          });
         }
         break;
 
       case 'screening_update':
         if (msg.data) {
-          this.callbacks.onToolCall('updateCandidateScreening', msg.data);
+          this.callbacks.onToolCall?.('updateCandidateScreening', msg.data);
+          this.onToolCall?.('updateCandidateScreening', msg.data);
           if (msg.data.bookedSlotId) {
-            this.callbacks.onToolCall('scheduleFaceToFaceInterview', {
+            this.callbacks.onToolCall?.('scheduleFaceToFaceInterview', {
+              selectedSlotId: msg.data.bookedSlotId,
+            });
+            this.onToolCall?.('scheduleFaceToFaceInterview', {
               selectedSlotId: msg.data.bookedSlotId,
             });
           }
           if (msg.data.callbackTime || msg.data.declineReason || msg.data.hrDecisionOutcome) {
-            this.callbacks.onToolCall('recordCallDisposition', {
+            this.callbacks.onToolCall?.('recordCallDisposition', {
+              callbackTime: msg.data.callbackTime,
+              declineReason: msg.data.declineReason,
+              outcome: msg.data.hrDecisionOutcome,
+            });
+            this.onToolCall?.('recordCallDisposition', {
               callbackTime: msg.data.callbackTime,
               declineReason: msg.data.declineReason,
               outcome: msg.data.hrDecisionOutcome,
@@ -550,28 +628,32 @@ export class GeminiLiveClient {
       case 'interrupted':
         console.log(`[GeminiLiveClient:${this.sessionId}] Server signaled interruption -> silencer triggered`);
         this.stopAgentPlayback();
-        this.callbacks.onInterrupted();
+        this.callbacks.onInterrupted?.();
+        this.onInterrupted?.();
         break;
 
       case 'turn_complete':
-        this.callbacks.onTurnComplete();
+        this.callbacks.onTurnComplete?.();
         break;
 
       case 'tool_call':
         if (msg.name) {
-          this.callbacks.onToolCall(msg.name, msg.args || {});
+          this.callbacks.onToolCall?.(msg.name, msg.args || {});
+          this.onToolCall?.(msg.name, msg.args || {});
         }
         break;
 
       case 'error':
         console.error(`[GeminiLiveClient:${this.sessionId}] Server error:`, msg.message);
-        this.callbacks.onError(msg.message || 'Error from voice server.');
+        this.callbacks.onError?.(msg.message || 'Error from voice server.');
+        this.onError?.(new Error(msg.message || 'Error from voice server.'));
         break;
 
       case 'session_ended':
       case 'session_closed':
         this.cleanup();
-        this.callbacks.onStatusChange('ended');
+        this.callbacks.onStatusChange?.('ended');
+        this.onClose?.();
         break;
 
       default:
@@ -625,7 +707,8 @@ export class GeminiLiveClient {
 
       if (!this.isAgentSpeakingState) {
         this.isAgentSpeakingState = true;
-        this.callbacks.onAgentSpeakingChange(true);
+        this.callbacks.onAgentSpeakingChange?.(true);
+        this.onSpeaking?.(true);
       }
 
       source.onended = () => {
@@ -641,7 +724,8 @@ export class GeminiLiveClient {
           this.playbackAudioCtx.currentTime >= this.nextPlaybackStartTime - 0.05
         ) {
           this.isAgentSpeakingState = false;
-          this.callbacks.onAgentSpeakingChange(false);
+          this.callbacks.onAgentSpeakingChange?.(false);
+          this.onSpeaking?.(false);
         }
       };
     } catch (e) {
@@ -675,7 +759,8 @@ export class GeminiLiveClient {
 
     if (this.isAgentSpeakingState) {
       this.isAgentSpeakingState = false;
-      this.callbacks.onAgentSpeakingChange(false);
+      this.callbacks.onAgentSpeakingChange?.(false);
+      this.onSpeaking?.(false);
     }
   }
 
@@ -697,7 +782,8 @@ export class GeminiLiveClient {
 
   public interruptAgent(): void {
     this.stopAgentPlayback();
-    this.callbacks.onInterrupted();
+    this.callbacks.onInterrupted?.();
+    this.onInterrupted?.();
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify({ type: 'interrupt', sessionId: this.sessionId }));
@@ -739,7 +825,8 @@ export class GeminiLiveClient {
 
   public stop(): void {
     this.cleanup();
-    this.callbacks.onStatusChange('ended');
+    this.callbacks.onStatusChange?.('ended');
+    this.onClose?.();
   }
 
   /**

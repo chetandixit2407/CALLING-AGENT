@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   PhoneCall, PhoneOff, Building2, Globe, Plus, RefreshCw, 
   Users, Mail, FileSpreadsheet, Briefcase, Database, Upload, Download,
-  Calendar, Newspaper, HeartPulse
+  Calendar, HeartPulse
 } from 'lucide-react';
 import { Candidate } from '../types';
 import { VapiCallStatus } from '../utils/vapiService';
@@ -18,8 +18,6 @@ interface HeaderProps {
   onOpenDataImportExportModal?: () => void;
   onOpenGoogleCalendarModal?: () => void;
   onOpenGmailModal?: () => void;
-  onToggleMarketNews?: () => void;
-  isMarketNewsOpen?: boolean;
   teamEmailCount?: number;
   careerRolesCount?: number;
   isSheetsSyncing?: boolean;
@@ -38,8 +36,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDataImportExportModal,
   onOpenGoogleCalendarModal,
   onOpenGmailModal,
-  onToggleMarketNews,
-  isMarketNewsOpen = false,
   teamEmailCount = 4,
   careerRolesCount = 6,
   isSheetsSyncing = false,
@@ -77,23 +73,6 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Quick Actions & Meta */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Market News Feed Button */}
-            {onToggleMarketNews && (
-              <button
-                id="btn-market-news"
-                onClick={onToggleMarketNews}
-                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border transition active:scale-95 shadow-xs ${
-                  isMarketNewsOpen
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
-                    : 'bg-slate-850 hover:bg-slate-800 text-amber-300 border-amber-500/30'
-                }`}
-                title="Live real estate market updates for Gurgaon & Dubai"
-              >
-                <Newspaper className="w-3.5 h-3.5 text-amber-400" />
-                <span>Market News</span>
-              </button>
-            )}
-
             {/* Google Calendar Automated Scheduler */}
             {onOpenGoogleCalendarModal && (
               <button

@@ -400,6 +400,7 @@ export function extractScreeningFromTranscript(messages: VapiTranscriptMessage[]
 class VapiClientService {
   private vapi: Vapi | null = null;
   private currentApiKey: string | null = null;
+  private currentAssistantId: string | null = null;
   private callStatus: VapiCallStatus = 'idle';
   private errorMessage: string | null = null;
   private isMutedState: boolean = false;
@@ -445,6 +446,75 @@ class VapiClientService {
       }
     } catch (e) {}
     return null;
+  }
+
+  /**
+   * Save user-supplied Assistant ID
+   */
+  public setStoredAssistantId(id: string): void {
+    if (!id || typeof id !== 'string') return;
+    const trimmed = id.trim();
+    if (trimmed.length > 5) {
+      this.currentAssistantId = trimmed;
+      try {
+        localStorage.setItem('VAPI_ASSISTANT_ID', trimmed);
+      } catch (e) {}
+      fetch('/api/vapi-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assistantId: trimmed }),
+      }).catch(() => {});
+    }
+  }
+
+  /**
+   * Retrieve cached assistant ID if available
+   */
+  public getStoredAssistantId(): string | null {
+    if (this.currentAssistantId) return this.currentAssistantId;
+    try {
+      const stored = localStorage.getItem('VAPI_ASSISTANT_ID') || localStorage.getItem('vapi_assistant_id');
+      if (stored && stored.trim().length > 5) {
+        this.currentAssistantId = stored.trim();
+        return this.currentAssistantId;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  /**
+   * Resolves the Vapi Assistant ID securely
+   */
+  public async resolveAssistantId(explicitId?: string): Promise<string> {
+    if (explicitId && explicitId.trim() && explicitId !== DEFAULT_VAPI_ASSISTANT_ID) {
+      const cleaned = explicitId.trim();
+      this.currentAssistantId = cleaned;
+      return cleaned;
+    }
+
+    const stored = this.getStoredAssistantId();
+    if (stored) return stored;
+
+    try {
+      const res = await fetch('/api/vapi-config');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.assistantId && typeof data.assistantId === 'string' && data.assistantId.trim()) {
+          this.currentAssistantId = data.assistantId.trim();
+          return this.currentAssistantId;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch assistantId from /api/vapi-config:', e);
+    }
+
+    const clientEnv = (import.meta as any).env?.VITE_VAPI_ASSISTANT_ID;
+    if (clientEnv && typeof clientEnv === 'string' && clientEnv.trim()) {
+      this.currentAssistantId = clientEnv.trim();
+      return this.currentAssistantId;
+    }
+
+    return explicitId?.trim() || DEFAULT_VAPI_ASSISTANT_ID;
   }
 
   /**
@@ -697,7 +767,7 @@ class VapiClientService {
       }
 
       // 5. Start call using assistant ID & merged configuration
-      const targetAssistantId = assistantId || DEFAULT_VAPI_ASSISTANT_ID;
+      const targetAssistantId = await this.resolveAssistantId(assistantId);
 
       let call;
       try {

@@ -23,7 +23,6 @@ import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
 import { CareerRolesManagerModal } from './components/CareerRolesManagerModal';
 import { DataImportExportModal } from './components/DataImportExportModal';
 import { CandidatePriorityBadge } from './components/CandidatePriorityBadge';
-import { MarketNewsFeedWidget } from './components/MarketNewsFeedWidget';
 import { GmailSequenceModal } from './components/GmailSequenceModal';
 import { GoogleCalendarSyncModal } from './components/GoogleCalendarSyncModal';
 import { VoiceSentimentAnalyticsDashboard } from './components/VoiceSentimentAnalyticsDashboard';
@@ -50,9 +49,6 @@ export default function App() {
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [metricsFilter, setMetricsFilter] = useState('all');
   const [dayAlertFilter, setDayAlertFilter] = useState<'all' | 'overdue' | 'today' | 'tomorrow' | 'pipeline'>('all');
-
-  // Market News Feed Widget state
-  const [isMarketNewsOpen, setIsMarketNewsOpen] = useState<boolean>(false);
 
   // Gmail Sequence Integration state
   const [showGmailModal, setShowGmailModal] = useState<boolean>(false);
@@ -319,12 +315,7 @@ export default function App() {
   });
 
   // Launch live Vapi voice assistant call
-  const handleStartVapiCall = (candidate?: Candidate) => {
-    if (vapiCallStatus === 'active' || vapiCallStatus === 'connecting') {
-      setShowVapiModal(true);
-      return;
-    }
-
+  const handleStartVapiCall = (candidate?: Candidate, scenario: CallScenario | string = 'screening') => {
     const targetCandidate =
       candidate ||
       selectedCandidate ||
@@ -332,6 +323,7 @@ export default function App() {
       candidates[0];
 
     setVapiCandidate(targetCandidate);
+    setActiveCallScenario(scenario as CallScenario);
     setShowVapiModal(true);
   };
 
@@ -339,10 +331,9 @@ export default function App() {
     vapiService.stopCall();
   };
 
-  // Launch a call simulation
+  // Default call handler activates Vapi calling agent
   const handleStartCall = (candidate: Candidate, scenario: string = 'screening') => {
-    setActiveCallCandidate(candidate);
-    setActiveCallScenario(scenario as CallScenario);
+    handleStartVapiCall(candidate, scenario as CallScenario);
   };
 
   // Trigger manual or programmatic data share with team emails
@@ -515,8 +506,6 @@ export default function App() {
           setGmailCandidate(selectedCandidate || candidates[0]);
           setShowGmailModal(true);
         }}
-        onToggleMarketNews={() => setIsMarketNewsOpen((prev) => !prev)}
-        isMarketNewsOpen={isMarketNewsOpen}
         teamEmailCount={teamConfig.teamMembers.filter((m) => m.isActive).length}
         careerRolesCount={careerRoles.length}
         isSheetsSyncing={isSheetsSyncing}
@@ -658,16 +647,6 @@ export default function App() {
             </div>
           )}
         </div>
-
-        {/* Real Estate Market News Widget (Gurgaon & Dubai) */}
-        {activeTab === 'roster' && (
-          <div className="mb-5">
-            <MarketNewsFeedWidget
-              isOpen={isMarketNewsOpen}
-              onClose={() => setIsMarketNewsOpen(false)}
-            />
-          </div>
-        )}
 
         {/* TAB 1: CANDIDATE ROSTER & SCREENING */}
         {activeTab === 'roster' && (
@@ -1164,27 +1143,22 @@ export default function App() {
         <VapiCallModal
           isOpen={showVapiModal}
           candidate={vapiCandidate}
+          scenario={activeCallScenario}
+          availableSlots={interviewSlots}
           assistantId={DEFAULT_VAPI_ASSISTANT_ID}
           onClose={() => setShowVapiModal(false)}
-          onCallEnded={(updatedCandidate) => {
-            setCandidates((prev) =>
-              prev.map((c) => (c.id === updatedCandidate.id ? updatedCandidate : c))
-            );
+          onCallEnded={(updatedCandidate, bookedSlotId) => {
+            handleCallEnded(updatedCandidate, bookedSlotId);
             if (selectedCandidate?.id === updatedCandidate.id) {
               setSelectedCandidate(updatedCandidate);
             }
-            // Trigger automatic team share
-            executeAutomatedTeamDataShare(updatedCandidate, 'Call Completed', teamConfig);
-            // Trigger toast notification with View Notes action
-            setCompletionToast({
-              candidate: updatedCandidate,
-              message: `Screening notes auto-saved & synced to ${teamConfig.teamMembers.filter(m => m.isActive).length} team emails for ${updatedCandidate.name}`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            });
           }}
+          onOpenConfirmationMail={(cand) => setConfirmationMailCandidate(cand)}
+          onOpenWhatsApp={(cand, template, query) => setWhatsAppCandidate({ candidate: cand, template, initialQuery: query })}
           onSwitchToInteractive={(cand) => {
             setShowVapiModal(false);
-            handleStartCall(cand, 'screening');
+            setActiveCallCandidate(cand);
+            setActiveCallScenario('screening');
           }}
         />
       )}

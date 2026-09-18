@@ -1,6 +1,6 @@
 import { Candidate, ChatMessage, CandidateNoteSnippet, ScreeningData, InterviewSlot } from '../types';
 
-interface GenerateSnippetParams {
+export interface GenerateSnippetParams {
   candidate: Candidate;
   transcript: ChatMessage[];
   durationSeconds: number;
@@ -10,12 +10,16 @@ interface GenerateSnippetParams {
   outcome?: string;
   bookedSlot?: InterviewSlot | null;
   agentName?: string;
+  geminiBulletedRequirements?: string | string[];
+  geminiSummary?: string;
+  candidateRequirements?: Record<string, any>;
+  geminiHighlights?: string[];
 }
 
 /**
  * Transcript Summary Extraction:
  * Analyzes call duration, conversation turns, screening data points,
- * and key candidate statements to produce a structured summary snippet.
+ * and extracts Gemini-powered speech-to-text bulleted candidate requirements.
  */
 export function generateStructuredCallSnippet({
   candidate,
@@ -27,6 +31,10 @@ export function generateStructuredCallSnippet({
   outcome,
   bookedSlot,
   agentName = 'Arjun AI (Voice Recruiter)',
+  geminiBulletedRequirements,
+  geminiSummary,
+  candidateRequirements,
+  geminiHighlights,
 }: GenerateSnippetParams): CandidateNoteSnippet {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-IN', {
@@ -59,7 +67,7 @@ export function generateStructuredCallSnippet({
 
   const lines: string[] = [];
 
-  const headerTitle = `[${agentName} Call Summary • ${dateStr}, ${timeStr}]`;
+  const headerTitle = `[${agentName} • ${dateStr}, ${timeStr}]`;
   lines.push(headerTitle);
 
   // Outcome line
@@ -67,7 +75,26 @@ export function generateStructuredCallSnippet({
   lines.push(`• Outcome: ${displayOutcome} (${scenario.replace('_', ' ').toUpperCase()} call)`);
 
   // Call metrics
-  lines.push(`• Duration: ${durationText} | Turns: ${turns} total (${candidateTurns.length} candidate responses)`);
+  lines.push(`• Duration: ${durationText} | Turns: ${turns} total (${candidateTurns.length} candidate speech responses)`);
+
+  // Format Gemini-generated bulleted requirements from speech transcript
+  if (geminiBulletedRequirements) {
+    const formattedReqs = Array.isArray(geminiBulletedRequirements)
+      ? geminiBulletedRequirements.join('\n')
+      : geminiBulletedRequirements.trim();
+
+    lines.push('');
+    lines.push('📋 KEY CANDIDATE REQUIREMENTS (Gemini AI Speech-to-Text Analysis):');
+    lines.push(formattedReqs);
+  } else if (geminiSummary) {
+    lines.push('');
+    lines.push(`📋 Gemini Executive Summary: ${geminiSummary}`);
+  }
+
+  // Key Highlights Badges if available
+  if (geminiHighlights && geminiHighlights.length > 0) {
+    lines.push(`• Key Highlights: [${geminiHighlights.join('] • [')}]`);
+  }
 
   // Key Screening Data Points
   const screeningBulletPoints: string[] = [];
@@ -90,8 +117,8 @@ export function generateStructuredCallSnippet({
     }
   }
   if (s.currentSalaryLPA || s.expectedSalaryLPA) {
-    const cur = s.currentSalaryLPA ? `Current: ${s.currentSalaryLPA}` : '';
-    const exp = s.expectedSalaryLPA ? `Expected: ${s.expectedSalaryLPA}` : '';
+    const cur = s.currentSalaryLPA ? `Current: ${s.currentSalaryLPA} LPA` : '';
+    const exp = s.expectedSalaryLPA ? `Expected: ${s.expectedSalaryLPA} LPA` : '';
     screeningBulletPoints.push(`CTC: ${[cur, exp].filter(Boolean).join(' | ')}`);
   }
   if (s.noticePeriodDays !== undefined || s.earliestJoiningDate) {
@@ -104,25 +131,26 @@ export function generateStructuredCallSnippet({
   }
 
   if (screeningBulletPoints.length > 0) {
+    lines.push('');
     lines.push('• Verified Screening Facts:');
     screeningBulletPoints.forEach((pt) => lines.push(`   - ${pt}`));
   }
 
   // Statements
   if (notableStatements.length > 0) {
-    lines.push('• Notable Candidate Statements:');
+    lines.push('• Notable Spoken Statements:');
     notableStatements.forEach((stmt) => lines.push(`   "${stmt}"`));
   }
 
   // Next action / interview slot
   if (bookedSlot) {
-    lines.push(`• Next Step: F2F Interview booked for ${bookedSlot.displayLabel} at Sector 67 Gurugram HQ.`);
+    lines.push(`• Next Step: Face-to-Face Interview confirmed for ${bookedSlot.displayLabel} at Sector 67 Gurugram HQ.`);
   } else if (detectedIntent === 'request_callback') {
     lines.push(`• Next Step: Priority callback requested. Automated reminder set.`);
   } else if (detectedIntent === 'already_joined_negotiation') {
     lines.push(`• Next Step: Joined competitor recently. Presented White Collar compensation package.`);
   } else {
-    lines.push(`• Next Step: HR review & profile assessment.`);
+    lines.push(`• Next Step: Recruiter review & scheduling face-to-face round at Sector 67 HQ.`);
   }
 
   const snippetText = lines.join('\n');
